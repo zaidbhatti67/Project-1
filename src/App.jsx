@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from './services/api';
 import { 
   connectSocket, 
@@ -50,8 +51,9 @@ const dividerStyle = {
   margin: '4px 0'
 };
 
-const DropdownItem = ({ label, shortcut, onClick, danger }) => {
+const DropdownItem = ({ label, shortcut, onClick, danger, isFocused }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const isHighlighted = isHovered || isFocused;
   return (
     <button
       onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
@@ -59,19 +61,19 @@ const DropdownItem = ({ label, shortcut, onClick, danger }) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        background: isHovered ? 'var(--n-primary-light)' : 'transparent',
+        background: isHighlighted ? 'var(--n-primary-light)' : 'transparent',
         border: 'none',
         padding: '8px 16px',
         fontSize: '11px',
         textAlign: 'left',
         cursor: 'pointer',
-        color: danger ? 'var(--n-error)' : (isHovered ? 'var(--n-primary)' : 'var(--n-text-sub)'),
+        color: danger ? 'var(--n-error)' : (isHighlighted ? 'var(--n-primary)' : 'var(--n-text-sub)'),
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '12px',
         width: '100%',
-        fontWeight: isHovered ? '600' : '400',
+        fontWeight: isHighlighted ? '600' : '400',
         transition: 'all 0.15s ease'
       }}
     >
@@ -109,7 +111,10 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or fileId
   const [activeDoc, setActiveDoc] = useState(null);
   const [isSimPanelOpen, setIsSimPanelOpen] = useState(true);
+
   const [activeMenu, setActiveMenu] = useState(null);
+  const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
+  const [focusedItemIndex, setFocusedItemIndex] = useState(-1);
 
   useEffect(() => {
     const handleCloseMenu = () => setActiveMenu(null);
@@ -120,8 +125,85 @@ export default function App() {
   const handleToggleMenu = (e, menuName) => {
     e.preventDefault();
     e.stopPropagation();
-    setActiveMenu(prev => prev === menuName ? null : menuName);
+    if (activeMenu === menuName) {
+      setActiveMenu(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+      });
+      setActiveMenu(menuName);
+      setFocusedItemIndex(-1);
+    }
   };
+
+  const handleMouseEnterMenu = (e, menuName) => {
+    if (activeMenu !== null && activeMenu !== menuName) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+      });
+      setActiveMenu(menuName);
+      setFocusedItemIndex(-1);
+    }
+  };
+
+  // Keyboard navigation for top-level menu dropdowns
+  useEffect(() => {
+    if (!activeMenu) return;
+
+    const menuData = getMenuData();
+    const navigableItems = (menuData[activeMenu]?.items || []).filter(
+      (item) => item.visible !== false && item.type !== 'divider'
+    );
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedItemIndex((prev) => (prev + 1) % navigableItems.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedItemIndex((prev) => (prev - 1 + navigableItems.length) % navigableItems.length);
+      } else if (e.key === 'Enter') {
+        if (focusedItemIndex >= 0 && focusedItemIndex < navigableItems.length) {
+          e.preventDefault();
+          navigableItems[focusedItemIndex].onClick();
+          setActiveMenu(null);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setActiveMenu(null);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const menuOrder = ['file', 'edit', 'view', 'insert', 'format', 'tools'];
+        const currentIdx = menuOrder.indexOf(activeMenu);
+        let nextIdx;
+        if (e.key === 'ArrowRight') {
+          nextIdx = (currentIdx + 1) % menuOrder.length;
+        } else {
+          nextIdx = (currentIdx - 1 + menuOrder.length) % menuOrder.length;
+        }
+        const nextMenu = menuOrder[nextIdx];
+
+        // Find the next menu trigger button to calculate its coordinates
+        const triggerBtn = document.querySelector(`[data-menu-trigger="${nextMenu}"]`);
+        if (triggerBtn) {
+          const rect = triggerBtn.getBoundingClientRect();
+          setMenuCoords({
+            top: rect.bottom + window.scrollY,
+            left: rect.left + window.scrollX,
+          });
+        }
+        setActiveMenu(nextMenu);
+        setFocusedItemIndex(-1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeMenu, focusedItemIndex, activeDoc, isSimPanelOpen]);
 
   // Modals state
   const [isShareOpen, setIsShareOpen] = useState(false);
@@ -773,13 +855,86 @@ export default function App() {
       />
     );
   }
+  const getMenuData = () => {
+    return {
+      file: {
+        label: 'File',
+        items: [
+          { type: 'item', label: 'New Document', onClick: () => handleCreateDocument('docs') },
+          { type: 'item', label: 'New Spreadsheet', onClick: () => handleCreateDocument('sheets') },
+          { type: 'item', label: 'New Presentation', onClick: () => handleCreateDocument('slides') },
+          { type: 'divider' },
+          { type: 'item', label: 'Download File', onClick: () => handleDownloadFile('txt') },
+          { 
+            type: 'item', 
+            label: 'Download HTML', 
+            onClick: () => handleDownloadFile('html'),
+            visible: activeDoc?.type === 'docs' 
+          },
+          { type: 'divider', visible: activeDoc?.type === 'docs' },
+          { type: 'item', label: 'Print File', shortcut: 'Ctrl+P', onClick: () => window.print() },
+          { type: 'divider' },
+          { type: 'item', label: 'Close File', onClick: handleBackToDashboard, danger: true },
+        ]
+      },
+      edit: {
+        label: 'Edit',
+        items: [
+          { type: 'item', label: 'Undo', shortcut: 'Ctrl+Z', onClick: handleMenuUndo },
+          { type: 'item', label: 'Redo', shortcut: 'Ctrl+Y', onClick: handleMenuRedo },
+          { type: 'divider' },
+          { type: 'item', label: 'Select All', shortcut: 'Ctrl+A', onClick: handleMenuSelectAll },
+          { type: 'item', label: 'Clear Content', onClick: handleClearContent, danger: true },
+        ]
+      },
+      view: {
+        label: 'View',
+        items: [
+          { 
+            type: 'item', 
+            label: isSimPanelOpen ? 'Hide Simulation Dock' : 'Show Simulation Dock', 
+            onClick: () => setIsSimPanelOpen(!isSimPanelOpen) 
+          },
+          { type: 'item', label: 'Open Settings', onClick: () => setIsSettingsOpen(true) },
+          { type: 'item', label: 'Command Palette', shortcut: 'Ctrl+K', onClick: () => setIsCommandPaletteOpen(true) },
+        ]
+      },
+      insert: {
+        label: 'Insert',
+        items: [
+          { type: 'item', label: 'Current Date & Time', onClick: handleMenuInsertDate },
+          { type: 'item', label: 'Horizontal Ruler', onClick: handleMenuInsertRuler },
+          { type: 'item', label: 'Table (3x3 Grid)', onClick: handleMenuInsertTable },
+        ]
+      },
+      format: {
+        label: 'Format',
+        items: [
+          { type: 'item', label: 'Bold', shortcut: 'Ctrl+B', onClick: () => handleMenuFormat('bold') },
+          { type: 'item', label: 'Italic', shortcut: 'Ctrl+I', onClick: () => handleMenuFormat('italic') },
+          { type: 'item', label: 'Underline', shortcut: 'Ctrl+U', onClick: () => handleMenuFormat('underline') },
+          { type: 'item', label: 'Strikethrough', onClick: () => handleMenuFormat('strike') },
+          { type: 'divider' },
+          { type: 'item', label: 'Clear Formatting', onClick: () => handleMenuFormat('clear') },
+        ]
+      },
+      tools: {
+        label: 'Tools',
+        items: [
+          { type: 'item', label: 'Word Count', onClick: handleWordCount },
+          { type: 'item', label: 'Capitalize Selection', onClick: () => handleMenuCapitalize('upper') },
+          { type: 'item', label: 'Lowercase Selection', onClick: () => handleMenuCapitalize('lower') },
+        ]
+      }
+    };
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       
       {/* Editor top header navigation */}
       {currentView !== 'dashboard' && activeDoc && (
-        <header className="editor-header-bar animate-fade">
+        <header className="editor-header-bar editor-header animate-fade">
           <div className="editor-title-group">
             <button 
               onClick={handleBackToDashboard} 
@@ -839,138 +994,22 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="editor-menubar" style={{ position: 'relative', display: 'flex', gap: '8px', zIndex: 99 }}>
-                {/* File */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'file' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'file')}
-                  >
-                    File
-                  </button>
-                  {activeMenu === 'file' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem label="New Document" onClick={() => handleCreateDocument('docs')} />
-                      <DropdownItem label="New Spreadsheet" onClick={() => handleCreateDocument('sheets')} />
-                      <DropdownItem label="New Presentation" onClick={() => handleCreateDocument('slides')} />
-                      <div style={dividerStyle} />
-                      <DropdownItem label="Download File" onClick={() => handleDownloadFile('txt')} />
-                      {activeDoc.type === 'docs' && <DropdownItem label="Download HTML" onClick={() => handleDownloadFile('html')} />}
-                      <div style={dividerStyle} />
-                      <DropdownItem label="Print File" shortcut="Ctrl+P" onClick={() => window.print()} />
-                      <div style={dividerStyle} />
-                      <DropdownItem label="Close File" onClick={handleBackToDashboard} danger />
+              <div className="editor-menubar top-menu-bar" style={{ position: 'relative', display: 'flex', gap: '8px', zIndex: 99 }}>
+                {Object.keys(getMenuData()).map((menuKey) => {
+                  const menu = getMenuData()[menuKey];
+                  return (
+                    <div key={menuKey} style={{ position: 'relative' }}>
+                      <button 
+                        className={`editor-menu-btn ${activeMenu === menuKey ? 'active' : ''}`}
+                        onClick={(e) => handleToggleMenu(e, menuKey)}
+                        onMouseEnter={(e) => handleMouseEnterMenu(e, menuKey)}
+                        data-menu-trigger={menuKey}
+                      >
+                        {menu.label}
+                      </button>
                     </div>
-                  )}
-                </div>
-
-                {/* Edit */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'edit' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'edit')}
-                  >
-                    Edit
-                  </button>
-                  {activeMenu === 'edit' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem label="Undo" shortcut="Ctrl+Z" onClick={handleMenuUndo} />
-                      <DropdownItem label="Redo" shortcut="Ctrl+Y" onClick={handleMenuRedo} />
-                      <div style={dividerStyle} />
-                      <DropdownItem label="Select All" shortcut="Ctrl+A" onClick={handleMenuSelectAll} />
-                      <DropdownItem label="Clear Content" onClick={handleClearContent} danger />
-                    </div>
-                  )}
-                </div>
-
-                {/* View */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'view' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'view')}
-                  >
-                    View
-                  </button>
-                  {activeMenu === 'view' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem 
-                        label={isSimPanelOpen ? "Hide Simulation Dock" : "Show Simulation Dock"} 
-                        onClick={() => setIsSimPanelOpen(!isSimPanelOpen)} 
-                      />
-                      <DropdownItem label="Open Settings" onClick={() => setIsSettingsOpen(true)} />
-                      <DropdownItem label="Command Palette" shortcut="Ctrl+K" onClick={() => setIsCommandPaletteOpen(true)} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Insert */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'insert' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'insert')}
-                  >
-                    Insert
-                  </button>
-                  {activeMenu === 'insert' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem 
-                        label="Current Date & Time" 
-                        onClick={handleMenuInsertDate} 
-                      />
-                      <DropdownItem 
-                        label="Horizontal Ruler" 
-                        onClick={handleMenuInsertRuler} 
-                      />
-                      <DropdownItem 
-                        label="Table (3x3 Grid)" 
-                        onClick={handleMenuInsertTable} 
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Format */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'format' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'format')}
-                  >
-                    Format
-                  </button>
-                  {activeMenu === 'format' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem label="Bold" shortcut="Ctrl+B" onClick={() => handleMenuFormat('bold')} />
-                      <DropdownItem label="Italic" shortcut="Ctrl+I" onClick={() => handleMenuFormat('italic')} />
-                      <DropdownItem label="Underline" shortcut="Ctrl+U" onClick={() => handleMenuFormat('underline')} />
-                      <DropdownItem label="Strikethrough" onClick={() => handleMenuFormat('strike')} />
-                      <div style={dividerStyle} />
-                      <DropdownItem label="Clear Formatting" onClick={() => handleMenuFormat('clear')} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Tools */}
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className={`editor-menu-btn ${activeMenu === 'tools' ? 'active' : ''}`}
-                    onClick={(e) => handleToggleMenu(e, 'tools')}
-                  >
-                    Tools
-                  </button>
-                  {activeMenu === 'tools' && (
-                    <div style={dropdownStyle}>
-                      <DropdownItem label="Word Count" onClick={handleWordCount} />
-                      <DropdownItem 
-                        label="Capitalize Selection" 
-                        onClick={() => handleMenuCapitalize('upper')} 
-                      />
-                      <DropdownItem 
-                        label="Lowercase Selection" 
-                        onClick={() => handleMenuCapitalize('lower')} 
-                      />
-                    </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1002,6 +1041,48 @@ export default function App() {
               <LogOut size={16} />
             </button>
           </div>
+
+          {activeMenu && createPortal(
+            <div 
+              className="dropdown-menu animate-fade" 
+              style={{
+                ...dropdownStyle,
+                position: 'fixed',
+                top: menuCoords.top,
+                left: menuCoords.left,
+                zIndex: 99999
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(() => {
+                let navigableCount = 0;
+                return getMenuData()[activeMenu].items
+                  .filter(item => item.visible !== false)
+                  .map((item, idx) => {
+                    if (item.type === 'divider') {
+                      return <div key={idx} style={dividerStyle} />;
+                    }
+                    const currentNavIdx = navigableCount;
+                    navigableCount++;
+                    return (
+                      <DropdownItem
+                        key={idx}
+                        label={item.label}
+                        shortcut={item.shortcut}
+                        onClick={() => {
+                          item.onClick();
+                          setActiveMenu(null);
+                        }}
+                        danger={item.danger}
+                        isFocused={focusedItemIndex === currentNavIdx}
+                      />
+                    );
+                  });
+              })()}
+            </div>,
+            document.body
+          )}
         </header>
       )}
 

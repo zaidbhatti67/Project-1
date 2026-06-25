@@ -1867,3 +1867,20 @@ ul[data-type="taskList"] input[type="checkbox"] {
   font-weight: 600;
 }
 
+/* Document Editor Top Menu Dropdown Fixes */
+.editor-header,
+.top-menu-bar,
+.dropdown-menu {
+  position: relative;
+  z-index: 9999;
+}
+
+.dropdown-menu,
+.menu-popover,
+.radix-dropdown-content {
+  position: absolute;
+  z-index: 99999 !important;
+  background: white;
+}
+
+

@@ -10,4 +10,12 @@
   - `[x]` `src/components/DocsEditor.jsx`
   - `[x]` `src/components/SheetsEditor.jsx`
   - `[x]` `src/components/SlidesEditor.jsx`
+- `[x]` Update CSS styles in index.css for menu stacking contexts (.editor-header, .top-menu-bar, .dropdown-menu)
+- `[x]` Refactor App.jsx menu data layout structure
+- `[x]` Implement React Portal rendering for all 6 top menus (File, Edit, View, Insert, Format, Tools)
+- `[x]` Implement dynamic positioning coordinates for dropdown menus
+- `[x]` Implement adjacent menu hover-switching logic
+- `[x]` Implement keyboard navigation (ArrowUp/ArrowDown, Enter, Escape, ArrowLeft/ArrowRight)
+- `[x]` Update DropdownItem component with keyboard focus states
+- `[x]` Verify build and behavior in the browser
 - `[x]` Verify production build compilation and compile project walkthrough documentation
