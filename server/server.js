@@ -486,6 +486,16 @@ io.on('connection', (socket) => {
   });
 });
 
+// Serve static assets from frontend build
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../dist')));
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
+});
+
 // Start listening
 server.listen(PORT, () => {
   console.log(`Nexus Workspace Full-Stack Node Server listening on port ${PORT}`);
