@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation Plan - Nexus Docs</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html" class="active">Implementation Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html">PSP Design Specs</a></li>
+        <li><a href="./walkthrough.html">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>Implementation Plan - Fully Functional System Settings, Layout Fixes &amp; System Audit</h1>
+<p>This plan outlines the design and changes to resolve the collapsed spreadsheet view (caused by missing CSS styling for workspace grid layout classes) and fully implement the system settings panel.</p>
+<h2>User Review Required</h2>
+<p>&gt; [!IMPORTANT]</p>
+<p>&gt; **Layout Collapse Root Cause**: The class names <code>g-split-workspace</code>, <code>g-editor-canvas-column</code>, <code>g-side-dock</code>, and <code>g-side-panel</code> used in <code>App.jsx</code> are completely unstyled in <code>index.css</code>. As a result, the parent editor containers default to standard block elements with collapsed height, causing Luckysheet to render at <code>0px</code> height. We will add layout rules for these classes in <code>index.css</code>.</p>
+<p>&gt;</p>
+<p>&gt; **Database &amp; User Profile schema constraints**: The Prisma database model <code>User</code> contains fields <code>name</code> and <code>email</code> but does not include <code>organization</code>. Therefore, <code>name</code> and <code>email</code> will be updated on the SQLite backend database, while the secondary <code>organization</code> preference will be persisted in <code>localStorage</code>. </p>
+<p>&gt;</p>
+<p>&gt; **Background Autosave control**: Toggling off "Cloud Auto-save" disables all debounced background saves while typing in Docs, cell updates in Sheets, and object manipulations in Slides. Explicit saves (e.g. clicking the "← Dashboard" exit button) will continue to synchronize state to prevent accidental loss of draft data.</p>
+<h2>Proposed Changes</h2>
+<hr>
+<h3>Layout &amp; Theme System</h3>
+<h4>[MODIFY] [index.css](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/index.css)</h4>
+<ul>
+<li>**Add Layout Rules**:</li>
+</ul>
+  <pre><code>  .g-split-workspace {
+<p>    display: flex;</p>
+<p>    flex-direction: row;</p>
+<p>    width: 100%;</p>
+<p>    overflow: hidden;</p>
+<p>  }</p>
+<p>  .g-editor-canvas-column {</p>
+<p>    flex: 1;</p>
+<p>    display: flex;</p>
+<p>    flex-direction: column;</p>
+<p>    height: 100%;</p>
+<p>    overflow: hidden;</p>
+<p>    position: relative;</p>
+<p>  }</p>
+<p>  .g-side-dock {</p>
+<p>    width: 48px;</p>
+<p>    background: var(--n-bg-canvas);</p>
+<p>    border-left: 1px solid var(--n-border);</p>
+<p>    display: flex;</p>
+<p>    flex-direction: column;</p>
+<p>    align-items: center;</p>
+<p>    padding: 16px 0;</p>
+<p>    gap: 12px;</p>
+<p>    flex-shrink: 0;</p>
+<p>    z-index: 10;</p>
+<p>  }</p>
+<p>  .g-side-panel {</p>
+<p>    width: 300px;</p>
+<p>    background: var(--n-bg-canvas);</p>
+<p>    border-left: 1px solid var(--n-border);</p>
+<p>    display: flex;</p>
+<p>    flex-direction: column;</p>
+<p>    flex-shrink: 0;</p>
+<p>    z-index: 10;</p>
+<p>    height: 100%;</p>
+<p>    overflow: hidden;</p>
+<p>  }</p>
+<p>  .g-avatars-group {</p>
+<p>    display: flex;</p>
+<p>    align-items: center;</p>
+<p>  }</p>
+  </code></pre>
+<ul>
+<li>**Add Dark Theme Overrides**: Implement a CSS theme selector <code>[data-theme="dark"]</code> overriding variables:</li>
+<li><code>--n-bg-workspace</code>: Deep Slate-900 <code>#0f172a</code></li>
+<li><code>--n-bg-canvas</code>: Deep Slate-800 <code>#1e293b</code></li>
+<li><code>--n-border</code>: Dark Border <code>#334155</code></li>
+<li><code>--n-border-hover</code>: Highlight border <code>#475569</code></li>
+<li><code>--n-text-main</code>: Off-white <code>#f8fafc</code></li>
+<li><code>--n-text-sub</code>: Slate-300 <code>#cbd5e1</code></li>
+<li><code>--n-text-light</code>: Slate-500 <code>#64748b</code></li>
+<li><code>--n-primary-light</code>: Indigo-950/900 <code>#1e1b4b</code></li>
+<li><code>--n-primary-glow</code>: Semi-transparent indigo <code>#312e81</code></li>
+<li>Add dark theme support rules for scrollbars, toolbars, modal boxes, and doc paper sheet (<code>[data-theme="dark"] .docs-paper-sheet</code> background <code>#1e293b</code>, text <code>#f8fafc</code>, borders <code>#334155</code>).</li>
+</ul>
+<hr>
+<h3>Backend Components</h3>
+<h4>[MODIFY] [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js)</h4>
+<ul>
+<li>Add a new route <code>PUT /api/auth/profile</code> to update user's profile details (<code>name</code> and <code>email</code>).</li>
+<li>Check if the email is already in use by another user; return error if so.</li>
+<li>Save the updated values to the SQLite database via Prisma.</li>
+<li>Issue and sign a new JWT token containing the updated details and return it to the client.</li>
+</ul>
+<hr>
+<h3>Frontend Services</h3>
+<h4>[MODIFY] [api.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/services/api.js)</h4>
+<ul>
+<li>Implement an <code>updateProfile</code> API service method that sends a PUT request with the user's name and email to <code>/api/auth/profile</code>.</li>
+</ul>
+<hr>
+<h3>Global Controller</h3>
+<h4>[MODIFY] [App.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/App.jsx)</h4>
+<ul>
+<li>Retrieve stored theme settings in a <code>useEffect</code> on mount:</li>
+<li>If <code>localStorage.getItem('nexus_theme') === 'dark'</code>, apply the theme tag: <code>document.documentElement.setAttribute('data-theme', 'dark')</code>.</li>
+<li>Pass current user profile details (<code>currentUser</code> and <code>setCurrentUser</code>) as props to <code>&lt;SettingsPanel /&gt;</code>.</li>
+</ul>
+<hr>
+<h3>Settings UI Panel</h3>
+<h4>[MODIFY] [SettingsPanel.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SettingsPanel.jsx)</h4>
+<ul>
+<li>Initialize state variables from <code>localStorage</code> values:</li>
+<li><code>autoSave</code>: <code>localStorage.getItem('nexus_autosave') !== 'false'</code></li>
+<li><code>theme</code>: <code>localStorage.getItem('nexus_theme') || 'light'</code></li>
+<li><code>zoom</code>: <code>localStorage.getItem('nexus_zoom') || '100'</code></li>
+<li><code>userProfile</code>: Load <code>name</code> and <code>email</code> from the current logged-in user profile, and load <code>organization</code> from <code>localStorage.getItem('nexus_organization') || 'Faculty of Computer Science'</code>.</li>
+<li>Update <code>handleSaveSettings</code> to:</li>
+<li>Persist <code>autoSave</code> value as string <code>true</code> or <code>false</code> to <code>localStorage.setItem('nexus_autosave', ...)</code>.</li>
+<li>Save visual theme value in <code>localStorage.setItem('nexus_theme', ...)</code>.</li>
+<li>Save default zoom ratio in <code>localStorage.setItem('nexus_zoom', ...)</code>.</li>
+<li>Save the organization value locally in <code>localStorage.setItem('nexus_organization', ...)</code>.</li>
+<li>Apply <code>document.documentElement.setAttribute('data-theme', theme)</code> immediately so the dark slate styling adapts in real-time.</li>
+<li>Invoke <code>api.updateProfile(name, email)</code> to save the profile to the database backend.</li>
+<li>Update <code>localStorage.setItem('nexus_token', result.token)</code> and <code>localStorage.setItem('nexus_user', JSON.stringify(result.user))</code>.</li>
+<li>Call the <code>onUpdateUser(result.user)</code> prop callback to instantly update the header avatar initials.</li>
+<li>Dismiss panel and trigger a success toast alert.</li>
+</ul>
+<hr>
+<h3>Editors Autosave &amp; Zoom Integration</h3>
+<h4>[MODIFY] [DocsEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/DocsEditor.jsx)</h4>
+<ul>
+<li>Read <code>localStorage.getItem('nexus_autosave') !== 'false'</code> in debounced save hook. Skip automatic saves if disabled.</li>
+<li>Set initial <code>zoom</code> state by reading <code>parseInt(localStorage.getItem('nexus_zoom'), 10) || 100</code>.</li>
+</ul>
+<h4>[MODIFY] [SheetsEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SheetsEditor.jsx)</h4>
+<ul>
+<li>Read <code>localStorage.getItem('nexus_autosave') !== 'false'</code> in Luckysheet <code>debouncedSave</code> callback. Skip automatic saves if disabled.</li>
+</ul>
+<h4>[MODIFY] [SlidesEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SlidesEditor.jsx)</h4>
+<ul>
+<li>Read <code>localStorage.getItem('nexus_autosave') !== 'false'</code> in <code>saveSlideState</code> when triggered by canvas updates (object movement, text typing).</li>
+</ul>
+<hr>
+<h2>Verification Plan</h2>
+<h3>Automated Tests</h3>
+<ul>
+<li>Run full Vite production build to make sure code compiles without syntax, type, or lint errors:</li>
+</ul>
+  <pre><code>  npm.cmd run build
+  </code></pre>
+<h3>Manual System Audit Walkthrough</h3>
+<p>We will run a complete validation audit of all components:</p>
+<ul>
+<li>**Layout &amp; Spreadsheet Rendering**:</li>
+<li>Open a Spreadsheet file and verify that Luckysheet renders properly underneath the menu and toolbar.</li>
+<li>**Settings Panel**:</li>
+<li>Open settings, update name to "Zaid Auditor" and email to "auditor@university.edu". Click "Save changes". Check that header avatar initials change instantly to "ZA". Refresh to check persistence.</li>
+<li>Switch visual theme to "Dark Slate". Check that the UI (dashboard, sidebar, toolbars, modal boxes, and Doc paper sheet) transforms to dark mode.</li>
+<li>Disable "Cloud Auto-save". Open a document, type text. Verify no background saves are triggered. Close using "← Dashboard" and verify that immediate save triggers correctly to preserve data.</li>
+<li>**Docs Editor**:</li>
+<li>Check all 16 fonts, zoom ratios, checklist creation, line spacing, and paragraph indents.</li>
+<li>**Sheets Editor**:</li>
+<li>Change cells in Luckysheet, write basic formulas (e.g. <code>=SUM(A1:A3)</code>) and check results.</li>
+<li>**Slides Editor**:</li>
+<li>Create a slide, add shapes, reorder using Up/Down arrows, switch slides, check if elements persist on load.</li>
+</ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

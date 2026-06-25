@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PSP Design Specification - Nexus Suite</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html">Implementation Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html" class="active">PSP Design Specs</a></li>
+        <li><a href="./walkthrough.html">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>Design Specification - Nexus Collaborative Suite (PSP Methodology)</h1>
+        <p>This document contains the project brief, thinking process, and the formal <strong>Personal Software Process (PSP)</strong> design specification templates for the Nexus Collaborative Suite.</p>
+        
+        <hr>
+        
+        <h2>Part 1: Project Brief & Thinking Process</h2>
+        
+        <h3>1.1 Chat Brief</h3>
+        <p>The objective of this project is to design and develop <strong>Nexus Collaborative Suite</strong>, a high-fidelity cloud productivity clone of Google Docs, Sheets, and Slides. To make this suitable for a university project, we are:</p>
+        <ol>
+          <li>Modeling the application utilizing Watts Humphrey's <strong>PSP Design Templates</strong> (OST, FST, SST, LST) to ensure complete structural and behavioral coverage.</li>
+          <li>Generating comprehensive UML diagrams to model external dynamic, external static, internal dynamic, and internal static behaviors.</li>
+          <li>Implementing a fully client-side <strong>Collaboration Simulator</strong> and <strong>Operational Transformation (OT) Log Engine</strong> that visually demonstrates concurrent conflict resolution in real-time.</li>
+        </ol>
+        
+        <h3>1.2 Thinking Process & Architectural Rationale</h3>
+        <ul>
+          <li><strong>Frontend Framework</strong>: We choose <strong>React</strong> with a <strong>Vite</strong> build system. React’s declarative state matches the dynamic nature of collaborative editors, where typing or editing dynamically updates multi-user cursors, comments, cell outputs, and slide canvases.</li>
+          <li><strong>Styling Architecture</strong>: A custom <strong>Vanilla CSS</strong> design system. We avoid bloated frameworks to focus on visual excellence—implementing modern glassmorphic surfaces, light-mode elements, high contrast grid selectors, and fluid CSS transitions.</li>
+          <li><strong>Real-Time Collaboration Mocking</strong>: Setting up socket servers, Redis instances, and databases is tedious for users to run locally. To resolve this, we build a <strong>Virtual Network Channel</strong> in the frontend. It runs background workers that simulate active editors (e.g., Alice, Charlie) typing, selecting cells, and modifying elements.</li>
+          <li><strong>Operational Transformation (OT) Design</strong>: True collaboration relies on resolving concurrent edit conflicts (e.g., insertion conflicts, cell updates). The simulator logs these conflict scenarios and displays the transformed operations in a visual console, showing how the system maintains eventual consistency.</li>
+          <li><strong>Spreadsheet Formula Engine</strong>: Built as a tokenizing parser that recursively resolves cell dependencies, supports range definitions (e.g. <code>A1:B3</code>), and dynamically updates values when dependencies change.</li>
+        </ul>
+        
+        <hr>
+        
+        <h2>Part 2: Design Specification Templates</h2>
+        
+        <h3>2.1 Operational Specification Template (OST) - External Dynamic</h3>
+        <p>The OST documents the external-dynamic characteristics of the system by describing user-system interaction scenarios, principal user actions, system responses, and error conditions.</p>
+        <p><strong>Objective</strong>: Model the collaborative user experience during concurrent document writing and spreadsheet edits.<br>
+        <strong>System Actors</strong>: User (Local Client), Collaborative Bot (Remote Peer), Sync Manager.</p>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Actor</th>
+              <th>User Action / Event</th>
+              <th>System Response / Output</th>
+              <th>Error / Recovery Conditions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1</strong></td>
+              <td>User</td>
+              <td>Clicks "+ New" -> "New Document" on Dashboard.</td>
+              <td>Launcher initializes a new Document instance. Renders TipTap rich text page layout with empty text and cursor focused.</td>
+              <td>Network failure: Launches editor in "Offline Mode" (read-only / local edits buffered).</td>
+            </tr>
+            <tr>
+              <td><strong>2</strong></td>
+              <td>User</td>
+              <td>Types text: <em>"Developing a collaborative suite."</em></td>
+              <td>TipTap inserts characters in local editor, updates selection, and schedules synchronization.</td>
+              <td>None.</td>
+            </tr>
+            <tr>
+              <td><strong>3</strong></td>
+              <td>Peer</td>
+              <td>Peer types <em>"university "</em> at character index 13.</td>
+              <td>Peer cursor moves to index 13. Peer types characters. Local TipTap Sync Manager receives operation, transforms indices, and merges content seamlessly.</td>
+              <td>Typing clash: If peer and local user type at the exact same index, OT engine transforms Peer's index forward by local length.</td>
+            </tr>
+            <tr>
+              <td><strong>4</strong></td>
+              <td>User</td>
+              <td>Enters <code>=SUM(A1:A3)</code> in spreadsheet cell B1.</td>
+              <td>Luckysheet internal formula engine records formula, evaluates the expression, and displays computed value in B1.</td>
+              <td>Syntax error: Displays <code>#ERROR!</code> in cell B1. Circular dependency: Displays <code>#REF!</code> in cell B1.</td>
+            </tr>
+            <tr>
+              <td><strong>5</strong></td>
+              <td>User</td>
+              <td>Clicks "Present" in Slides editor.</td>
+              <td>Slides editor hides workspace toolbar, slides container goes fullscreen, enters slide presentation state, and listens for key inputs.</td>
+              <td>Exit command: Esc key exits presentation mode and returns to Slide editor view.</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <hr>
+        
+        <h3>2.2 Functional Specification Template (FST) - External Static</h3>
+        <p>The FST documents the structural specifications of the classes and components including interfaces, methods, parameter signatures, and exceptions.</p>
+        
+        <h4>Class: <code>DocsEditor</code> (TipTap Rich Text Component)</h4>
+        <ul>
+          <li><strong>Attributes</strong>:
+            <ul>
+              <li><code>doc</code>: <code>Object</code> (Document state from database containing ID, name, content)</li>
+              <li><code>onSave</code>: <code>Function(id: String, content: String, type: String)</code> (Autosave callback)</li>
+              <li><code>editor</code>: <code>Editor</code> (Active TipTap/ProseMirror editor controller instance)</li>
+            </ul>
+          </li>
+          <li><strong>Methods</strong>:
+            <ul>
+              <li><code>useEditor(config: Object) : Editor</code><br>
+              <em>Description</em>: React hook initializing TipTap StarterKit with Table, Link, Image, TextAlign, and Underline extensions.</li>
+              <li><code>extractOutline() : Array[Heading]</code><br>
+              <em>Description</em>: Traverses the document node tree to extract H1, H2, H3 headings for the navigation outline.</li>
+              <li><code>handleTextSelection(range: Range) : Void</code><br>
+              <em>Description</em>: Listens to text highlights to display comment anchors and formatting highlights.</li>
+            </ul>
+          </li>
+        </ul>
+        
+        <h4>Class: <code>SheetsEditor</code> (Luckysheet Component)</h4>
+        <ul>
+          <li><strong>Attributes</strong>:
+            <ul>
+              <li><code>doc</code>: <code>Object</code> (Document state containing ID, name, workbook JSON content)</li>
+              <li><code>onSave</code>: <code>Function(id: String, sheetsData: Array, type: String)</code> (Autosave callback)</li>
+              <li><code>isReady</code>: <code>Boolean</code> (State guard checking if workbook has fully loaded in DOM)</li>
+            </ul>
+          </li>
+          <li><strong>Methods</strong>:
+            <ul>
+              <li><code>cellMapToLuckysheet(cellMap: Object) : Array[Sheet]</code><br>
+              <em>Description</em>: Bidirectional adapter translating old cell-map formats into Luckysheet sheets.</li>
+              <li><code>luckysheetToCellMap(sheets: Array) : Object</code><br>
+              <em>Description</em>: Reverse adapter converting Luckysheet sheet grid data back to cell-map formats.</li>
+              <li><code>debouncedSave() : Void</code><br>
+              <em>Description</em>: Debounces sheet updates by 1 second before invoking <code>onSave</code> to save full sheet JSON.</li>
+              <li><code>workbookCreateAfter() : Void</code><br>
+              <em>Description</em>: Hook callback that marks <code>isReady = true</code> when Luckysheet completes DOM creation.</li>
+            </ul>
+          </li>
+        </ul>
+        
+        <h4>Class: <code>SlidesEditor</code> (Fabric.js Canvas Component)</h4>
+        <ul>
+          <li><strong>Attributes</strong>:
+            <ul>
+              <li><code>doc</code>: <code>Object</code> (Slide document state containing slides array)</li>
+              <li><code>onSave</code>: <code>Function(id: String, slidesData: Array)</code> (Autosave callback)</li>
+              <li><code>fabricCanvas</code>: <code>Ref[fabric.Canvas]</code> (Persistent reference to the Fabric canvas wrapper)</li>
+              <li><code>isPresenting</code>: <code>Boolean</code> (Presentation mode state flag)</li>
+            </ul>
+          </li>
+          <li><strong>Methods</strong>:
+            <ul>
+              <li><code>addShape(type: String) : Void</code><br>
+              <em>Description</em>: Injects a vector shape (rect, circle, triangle) or textbox into the active slide coordinate frame.</li>
+              <li><code>groupObjects() : Void</code><br>
+              <em>Description</em>: Packages highlighted vector elements into a single <code>fabric.Group</code>.</li>
+              <li><code>changeLayer(direction: String) : Void</code><br>
+              <em>Description</em>: Updates object stack order using <code>bringToFront()</code> or <code>sendToBack()</code>.</li>
+              <li><code>debouncedSave() : Void</code><br>
+              <em>Description</em>: Serializes active canvas elements using <code>.toJSON()</code> and commits to database.</li>
+            </ul>
+          </li>
+        </ul>
+        
+        <hr>
+        
+        <h3>2.3 State Specification Template (SST) - Internal Dynamic</h3>
+        <p>The SST documents the internal-dynamic behavior of the system, representing state variables, states, transitions, events, conditions, and resulting actions.</p>
+        <p><strong>State Variables</strong>:<br>
+        <code>clientRevision</code>: Current local sync revision index.<br>
+        <code>bufferEmpty</code>: Boolean indicating whether local operations are awaiting acknowledgement.<br>
+        <code>syncStatus</code>: Enum [<code>CONNECTED</code>, <code>AWAITING_ACK</code>, <code>OFFLINE</code>].<br>
+        <code>isReady</code>: Boolean state variable indicating whether the Luckysheet/Fabric canvas engine has fully mounted and is ready for sync updates.<br>
+        <code>isPresenting</code>: Boolean state variable indicating whether Slides presentation overlay is active.</p>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>Current State</th>
+              <th>Event / Input</th>
+              <th>Condition</th>
+              <th>Action</th>
+              <th>Next State</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Connected_Idle</strong></td>
+              <td>Local Edit</td>
+              <td><code>bufferEmpty == true</code></td>
+              <td>Generate Operation <code>Op</code>; Apply <code>Op</code> locally; Send <code>Op</code> to server; Start ack timer.</td>
+              <td><strong>Awaiting_Ack</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Connected_Idle</strong></td>
+              <td>Local Edit</td>
+              <td><code>bufferEmpty == false</code></td>
+              <td>Add <code>Op</code> to local buffer; Apply <code>Op</code> locally.</td>
+              <td><strong>Connected_Idle</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Connected_Idle</strong></td>
+              <td>Remote Op Received</td>
+              <td><code>Op.revision == clientRevision</code></td>
+              <td>Apply <code>Op</code> locally; Increment <code>clientRevision</code>.</td>
+              <td><strong>Connected_Idle</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Awaiting_Ack</strong></td>
+              <td>Server Ack Received</td>
+              <td><code>bufferEmpty == true</code></td>
+              <td>Clear wait buffer; Clear ack timer; Increment <code>clientRevision</code>.</td>
+              <td><strong>Connected_Idle</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Awaiting_Ack</strong></td>
+              <td>Remote Op Received</td>
+              <td><code>Op.revision &lt; serverRevision</code></td>
+              <td>Run Operational Transformation <code>OT(localBuffer, Op)</code>; Apply transformed remote op locally; Adjust indices in local buffer.</td>
+              <td><strong>Awaiting_Ack</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Awaiting_Ack</strong></td>
+              <td>Timeout / Connection Lost</td>
+              <td>Ack timer expires</td>
+              <td>Set state to offline; Log network failure.</td>
+              <td><strong>Offline_Mode</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Offline_Mode</strong></td>
+              <td>Network Restored</td>
+              <td>Network flag active</td>
+              <td>Send all buffered operations as a bulk sync payload.</td>
+              <td><strong>Resolving_Bulk</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Initializing_Workbook</strong></td>
+              <td><code>workbookCreateAfter</code> hook fires</td>
+              <td>None</td>
+              <td>Set <code>isReady = true</code>; Apply queued simulated edits.</td>
+              <td><strong>Workbook_Ready</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Workbook_Ready</strong></td>
+              <td>Component Unmount</td>
+              <td>None</td>
+              <td>Clear container innerHTML; Set <code>isReady = false</code>.</td>
+              <td><strong>Disconnected</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Workbook_Ready</strong></td>
+              <td>Cell Updated hook</td>
+              <td><code>isReady == true</code></td>
+              <td>Trigger <code>debouncedSave</code> (1s delay).</td>
+              <td><strong>Workbook_Ready</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Workbook_Ready</strong></td>
+              <td>Cell Updated hook</td>
+              <td><code>isReady == false</code></td>
+              <td>Ignore event to avoid initialization loop.</td>
+              <td><strong>Workbook_Ready</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Slideshow_Idle</strong></td>
+              <td>Press "Present"</td>
+              <td>None</td>
+              <td>Set <code>isPresenting = true</code>; Mount fullscreen slideshow viewport.</td>
+              <td><strong>Presenting</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Presenting</strong></td>
+              <td>Press "Esc"</td>
+              <td>None</td>
+              <td>Set <code>isPresenting = false</code>; Exit fullscreen viewport; Enable slide editor.</td>
+              <td><strong>Slideshow_Idle</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <hr>
+        
+        <h3>2.4 Logic Specification Template (LST) - Internal Static</h3>
+        <p>The LST documents the internal-static logic of critical procedures, utilizing pseudocode and logic verification details.</p>
+        
+        <h4>Algorithm 1: Operational Transformation (OT) Text Merge (<code>transformText</code>)</h4>
+        <p><strong>Objective</strong>: Given a local insertion and a remote concurrent insertion, transform the indices so both clients arrive at identical document text.</p>
+        <pre><code>FUNCTION transformText(localOp, remoteOp):
+    // An operation has format: { type: "insert"|"delete", index: Integer, text: String }
+    IF localOp.type == "insert" AND remoteOp.type == "insert" THEN
+        IF localOp.index &lt; remoteOp.index THEN
+            // Local op was earlier. Shift remote op index by length of local text
+            remoteOp.transformedIndex = remoteOp.index + length(localOp.text)
+            localOp.transformedIndex = localOp.index
+        ELSE IF localOp.index &gt; remoteOp.index THEN
+            // Remote op was earlier. Shift local op index by length of remote text
+            localOp.transformedIndex = localOp.index + length(remoteOp.text)
+            remoteOp.transformedIndex = remoteOp.index
+        ELSE
+            // TIE-BREAKER: Resolve index collision using Client ID comparison
+            IF localOp.clientId &lt; remoteOp.clientId THEN
+                remoteOp.transformedIndex = remoteOp.index + length(localOp.text)
+                localOp.transformedIndex = localOp.index
+            ELSE
+                localOp.transformedIndex = localOp.index + length(remoteOp.text)
+                remoteOp.transformedIndex = remoteOp.index
+            ENDIF
+        ENDIF
+    ENDIF
+    RETURN [localOp, remoteOp]</code></pre>
+        
+        <p><strong>Verification (Loop Invariant & Correctness)</strong>:</p>
+        <ul>
+          <li><strong>Pre-condition</strong>: Both clients A and B start with identical text string <code>S</code>, at revision <code>R</code>.</li>
+          <li><strong>Action</strong>: A inserts text <code>T_A</code> at index <code>I</code>. B inserts text <code>T_B</code> at index <code>I</code>.</li>
+          <li><strong>Execution</strong>:
+            <ul>
+              <li>Client A sends <code>{type: "insert", index: I, text: T_A, clientId: "A"}</code>.</li>
+              <li>Client B sends <code>{type: "insert", index: I, text: T_B, clientId: "B"}</code>.</li>
+              <li>Assuming ASCII order: <code>"A" &lt; "B"</code>.</li>
+              <li>On transformation: Client A (Client ID "A") has priority.</li>
+              <li>Client B's operation transformed index becomes <code>I + length(T_A)</code>.</li>
+              <li>Client A's operation transformed index remains <code>I</code>.</li>
+            </ul>
+          </li>
+          <li><strong>Post-condition</strong>: Both client editors apply the operations to resolve to text: <code>S[0...I] + T_A + T_B + S[I...]</code>. Eventual consistency is maintained.</li>
+        </ul>
+        
+        <h4>Algorithm 2: Cell-Map to Luckysheet Converter (<code>cellMapToLuckysheet</code>)</h4>
+        <p><strong>Objective</strong>: Convert database cellular mappings (compatible with legacy storage schemas) to Luckysheet's 2D grid structure representation.</p>
+        <pre><code>FUNCTION cellMapToLuckysheet(cellMap):
+    celldata = []
+    
+    FOR EACH [cellId, cellObj] IN entries(cellMap):
+        idx = cellToIndices(cellId)
+        IF idx IS NOT NULL THEN
+            rawValue = cellObj.rawValue OR cellObj.value OR ""
+            cellDataValue = {
+                ct: { fa: "@", t: "g" }
+            }
+            
+            IF rawValue STARTS WITH "=" THEN
+                cellDataValue.f = rawValue
+                cellDataValue.v = ""
+            ELSE
+                cellDataValue.v = rawValue
+                cellDataValue.m = rawValue
+            ENDIF
+            
+            celldata.push({
+                r: idx.row,
+                c: idx.col,
+                v: cellDataValue
+            })
+        ENDIF
+    ENDFOR
+    
+    RETURN [
+        {
+            name: "Sheet1",
+            status: 1,
+            order: 0,
+            column: 18,
+            row: 50,
+            celldata: celldata,
+            defaultRowHeight: 20,
+            defaultColWidth: 90
+        }
+    ]</code></pre>
+        
+        <h4>Algorithm 3: Container Unmount Cleanup (Luckysheet Memory Leak & Crash Fix)</h4>
+        <p><strong>Objective</strong>: Clean up container nodes safely during React component unmounts without throwing fatal runtime errors due to Luckysheet's lack of a native `.destroy()` API.</p>
+        <pre><code>useEffect(() => {
+    // Initialization block...
+    window.luckysheet.create({
+        container: "luckysheet-container",
+        // ...
+        hook: {
+            workbookCreateAfter: () => setIsReady(true)
+        }
+    });
+
+    return () => {
+        // DO NOT call window.luckysheet.destroy() as it throws undefined exceptions
+        // and crashes React's state lifecycle. Instead, wipe the DOM container.
+        const container = document.getElementById("luckysheet-container");
+        if (container) {
+            container.innerHTML = ""; // Hard purge child elements
+        }
+    };
+}, [doc.id]);</code></pre>
+        
+        <p><strong>Verification</strong>:</p>
+        <ul>
+          <li>Ensures that when a user switches between Sheets and Documents, React does not attempt to execute non-existent destructor methods inside Luckysheet, thereby keeping the JS thread running smoothly.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

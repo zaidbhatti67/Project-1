@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation Upgrade Plan - Nexus Workspace</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html">Editor Upgrade Plan</a></li>
+        <li><a href="./documentation_upgrade_plan.html" class="active">Docs Upgrade Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html">PSP Design Specs</a></li>
+        <li><a href="./walkthrough.html">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>Implementation Plan: Update Workspace Documentation</h1>
+        <p>This plan outlines the updates required for the Nexus Collaborative Suite documentation to align with the upgraded editor engines (TipTap, Luckysheet, and Fabric.js).</p>
+        
+        <hr>
+<p>This plan outlines the updates required for the Nexus Collaborative Suite documentation to align with the upgraded editor engines (TipTap, Luckysheet, and Fabric.js).</p>
+<h2>Proposed Changes</h2>
+<p>We will modify the following documentation files:</p>
+<h3>1. UML Diagrams (`docs/uml_diagrams.md` &amp; `docs/uml_diagrams.html`)
+- Update the class diagram to replace mock `Cell` and `SlideElement` entities.
+- Introduce `SheetConfiguration`, `Sheet`, `CellData`, and `CellValue` classes to model the Luckysheet data representation.
+- Introduce `FabricCanvas`, `FabricObject`, and slide speaker notes to model Fabric.js slide structures.
+- Introduce `EditorInstance` and TipTap extensions (StarterKit, Table, Link, Image) to model the ProseMirror-based rich text editor.</h3>
+<h3>2. PSP Design Specification (`docs/design_specification_psp.md` &amp; `docs/design_specification_psp.html`)
+- Update the **Functional Specification Template (FST)** to replace outdated interfaces with class schemas for `DocsEditor` (using TipTap), `SheetsEditor` (using Luckysheet), and `SlidesEditor` (using Fabric.js).
+- Update the **Operational Specification Template (OST)** and **State Specification Template (SST)** to reference the actual hooks, hooks parameters, and state variable changes (e.g. `isReady` workbook state and container unmount resets).
+- Update the **Logic Specification Template (LST)** to document how the cell mapping conversion handles Excel-like formulas, and explain how the unmount container cleanup resolves the Luckysheet `.destroy()` crash.</h3>
+<p>---</p>
+<h2>Verification Plan</h2>
+<h3>Automated Verification
+- Compile and build the React project using Vite:
+  ```powershell
+  npm run build
+  ```
+  to ensure that there are no documentation syntax/link errors that break asset resolution.</h3>
+<h3>Manual Verification
+- View the rendered HTML files in a browser to check that the Mermaid.js diagrams render properly and that styling is preserved.</h3>
+
+      </section>
+    </main>
+  </div>
+</body>
+</html>

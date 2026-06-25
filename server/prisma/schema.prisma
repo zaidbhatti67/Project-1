@@ -1,0 +1,86 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  email        String       @unique
+  passwordHash String
+  name         String
+  avatarBg     String       @default("#4f46e5")
+  files        File[]
+  folders      Folder[]
+  permissions  Permission[]
+  comments     Comment[]
+  activities   Activity[]
+  createdAt    DateTime     @default(now())
+}
+
+model Folder {
+  id         String   @id @default(uuid())
+  name       String
+  parentId   String?
+  parent     Folder?  @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
+  subFolders Folder[] @relation("SubFolders")
+  files      File[]
+  ownerId    Int
+  owner      User     @relation(fields: [ownerId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model File {
+  id          String       @id @default(uuid())
+  name        String
+  type        String       // "docs", "sheets", "slides"
+  content     String       @default("") // Contains text or JSON content
+  revision    Int          @default(10)
+  isFavorite  Boolean      @default(false)
+  isArchived  Boolean      @default(false)
+  folderId    String?
+  folder      Folder?      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  ownerId     Int
+  owner       User         @relation(fields: [ownerId], references: [id])
+  permissions Permission[]
+  comments    Comment[]
+  activities  Activity[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  fileId    String
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   // "owner", "editor", "viewer"
+  createdAt DateTime @default(now())
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  fileId    String
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String
+  resolved  Boolean  @default(false)
+  timestamp String   // e.g., "10:15 AM"
+  createdAt DateTime @default(now())
+}
+
+model Activity {
+  id            String   @id @default(uuid())
+  fileId        String
+  file          File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+  actionMessage String
+  type          String   // "edit", "sync", "conflict"
+  createdAt     DateTime @default(now())
+}

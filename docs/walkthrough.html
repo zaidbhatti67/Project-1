@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Walkthrough Guide - Nexus Docs</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html">Implementation Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html">PSP Design Specs</a></li>
+        <li><a href="./walkthrough.html" class="active">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>Walkthrough: Google Workspace Clone Fixes</h1>
+<p>We have resolved all three issues described in the user request. Every feature has been implemented natively, fully functional, and verified to compile correctly.</p>
+<hr>
+<h2>🛠️ Implementation Summary</h2>
+<h3>1. Slides Editor Data Saving &amp; Reordering</h3>
+<ul>
+<li>**Wrapper Presentation Format**:</li>
+<li>Implemented <code>extractElements(canvas)</code> inside [SlidesEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SlidesEditor.jsx) to translate Fabric.js shapes, textbox objects, and images into the required <code>elements</code> array format.</li>
+<li>Formatted the serialized payload into the requested <code>presentation</code> wrapper schema (<code>id</code>, <code>title</code>, <code>slides</code>, <code>updatedAt</code>).</li>
+<li>Added backward-compatible JSON parsing for <code>doc.content</code> in [App.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/App.jsx) to seamlessly parse both the presentation object and direct slide arrays.</li>
+<li>**Switch Slide Save**:</li>
+<li>Wired <code>handleSwitchSlide(idx)</code> to execute <code>saveSlideState</code> before transitioning the active selection. This prevents data loss when switching slide tabs.</li>
+<li>**Autosave &amp; Stale Closures**:</li>
+<li>Addressed stale closure bugs in canvas listeners by mapping updates to a render-bound <code>slidesRef</code> reference.</li>
+<li>Linked Fabric's modified, text-changed, added, and removed listeners to autosave immediately on any changes.</li>
+<li>**Slide Reordering Deck Sidebar**:</li>
+<li>Added Move Up (▲) and Move Down (▼) buttons on each slide thumbnail in the deck sidebar, swapping their order and updating the presentation database payload.</li>
+</ul>
+<h3>2. Document Editor Formatting Toolbar Upgrades</h3>
+<ul>
+<li>**Complete Font Families (16 Fonts)**:</li>
+<li>Updated the font families dropdown in [DocsEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/DocsEditor.jsx#L804) to load and support all 16 requested font styles (Arial, Times New Roman, Calibri, Cambria, Georgia, Verdana, Tahoma, Trebuchet MS, Courier New, Roboto, Open Sans, Lato, Montserrat, Poppins, Inter, Comic Sans MS).</li>
+<li>Loaded required font assets from Google Fonts inside [index.css](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/index.css#L2).</li>
+<li>**Text &amp; List Editing Features**:</li>
+<li>**Checklists**: Imported <code>@tiptap/extension-task-list</code> and <code>@tiptap/extension-task-item</code> for checklists.</li>
+<li>**Line Spacing**: Developed a custom TipTap <code>LineSpacing</code> extension to dynamically query and apply style line heights.</li>
+<li>**Increase/Decrease Indents**: Developed a custom TipTap <code>IndentExtension</code> that parses and increments/decrements <code>padding-left</code> styles.</li>
+<li>**Font Size Dropdown**: Replaced the +/- font size buttons with a standard <code>&lt;select&gt;</code> dropdown that updates and reflects active font selection sizes.</li>
+<li>**Action Controls**: Added buttons for Strikethrough, Copy, Cut, Paste, and Select All.</li>
+<li>**Cursor &amp; Selection Alignment**:</li>
+<li>Wired formatting actions to chain <code>.focus()</code> so text selections remain active, cursor positions do not jump, and formatting applies to selections or newly typed text.</li>
+</ul>
+<h3>3. Universal Dashboard Back Button with Autosave</h3>
+<ul>
+<li>**Blocking Autosave Hook**:</li>
+<li>Registered <code>window.triggerImmediateSave</code> on the window scope when Docs, Sheets, and Slides editors load, mapping to immediate, non-debounced database update actions.</li>
+<li>**← Dashboard Navigation Button**:</li>
+<li>Integrated a visible <code>← Dashboard</code> back button next to the rename field in [App.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/App.jsx#L744) editor header.</li>
+<li>Clicking this triggers <code>window.triggerImmediateSave()</code>, renders a "Saving..." spinner on the button, and safely returns the user to the dashboard with no data loss.</li>
+</ul>
+<hr>
+<h2>🚀 Verification Results</h2>
+<h3>Production Compilation Build check</h3>
+<p>Vite compilation of all assets successfully finished:</p>
+<pre><code>vite v8.1.0 building client environment for production...
+<p>transforming...✓ 215 modules transformed.</p>
+<p>rendering chunks...</p>
+<p>computing gzip size...</p>
+<p>dist/index.html                   1.29 kB │ gzip:   0.48 kB</p>
+<p>dist/assets/index-CRGGeZj1.css   27.23 kB │ gzip:   5.14 kB</p>
+<p>dist/assets/index-9w2nJ36O.js   848.22 kB │ gzip: 255.19 kB</p>
+<p>✓ built in 666ms</p>
+</code></pre>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
