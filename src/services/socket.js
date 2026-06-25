@@ -2,12 +2,14 @@ import { io } from 'socket.io-client';
 
 let socket = null;
 
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+
 export const connectSocket = (fileId, username) => {
   if (socket) {
     socket.disconnect();
   }
 
-  socket = io('http://localhost:3001');
+  socket = io(SOCKET_URL);
 
   socket.on('connect', () => {
     console.log('Socket connected to server rooms successfully:', socket.id);
