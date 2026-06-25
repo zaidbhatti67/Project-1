@@ -451,7 +451,17 @@ export default function App() {
       emitContent(id, username, serializedContent, nextRev);
 
       // 3. Update local state
-      setActiveDoc(prev => ({ ...prev, revision: nextRev }));
+      setActiveDoc(prev => ({ ...prev, content: serializedContent, revision: nextRev }));
+
+      // Update simulatedEdits to maintain local client consistency
+      if (activeDoc.type === 'sheets') {
+        setSimulatedEdits(prev => ({ ...prev, cells: newContent, sheetDocId: id }));
+      } else if (activeDoc.type === 'slides') {
+        const slidesArr = newContent?.slides || (Array.isArray(newContent) ? newContent : []);
+        setSimulatedEdits(prev => ({ ...prev, slides: slidesArr, slideDocId: id }));
+      } else if (activeDoc.type === 'docs') {
+        setSimulatedEdits(prev => ({ ...prev, text: newContent, textDocId: id }));
+      }
       
       // Emit details
       if (activeDoc.type === 'docs' && changeType === 'text-change') {
