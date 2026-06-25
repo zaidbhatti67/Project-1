@@ -341,6 +341,16 @@ export default function App() {
     }
   };
 
+  const handleMoveFile = async (fileId, folderId) => {
+    try {
+      await api.updateFile(fileId, { folderId });
+      loadWorkspaceData();
+      handleAddToast('File Organized', 'Document moved to folder successfully.', 'success');
+    } catch (err) {
+      handleAddToast('Move failed', err.message, 'error');
+    }
+  };
+
   // Local save handler (broadcasts edit payloads to sockets)
   const handleLocalSave = async (id, newContent, changeType, extra1, extra2) => {
     let serializedContent = newContent;
@@ -1010,6 +1020,7 @@ export default function App() {
               onAddToast={handleAddToast}
               foldersList={folders}
               onLogout={handleLogout}
+              onMoveFile={handleMoveFile}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>

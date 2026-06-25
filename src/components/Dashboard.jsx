@@ -32,7 +32,8 @@ export default function Dashboard({
   onOpenSettings,
   onAddToast,
   foldersList = [],
-  onLogout
+  onLogout,
+  onMoveFile
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('home'); // 'home', 'favorites', 'shared', 'trash'
@@ -341,6 +342,22 @@ export default function Dashboard({
             </p>
           </div>
 
+          {/* Quick Metrics stats counter row */}
+          <div className="n-stats-bar animate-fade">
+            <div className="n-stat-card">
+              <span className="n-stat-num">{documents.length}</span>
+              <span className="n-stat-label">Total Workspaces</span>
+            </div>
+            <div className="n-stat-card">
+              <span className="n-stat-num">{documents.filter(d => d.isFavorite).length}</span>
+              <span className="n-stat-label">Starred Files</span>
+            </div>
+            <div className="n-stat-card">
+              <span className="n-stat-num">{folders.length}</span>
+              <span className="n-stat-label">Directories</span>
+            </div>
+          </div>
+
           {/* Breadcrumb Navigation Trail */}
           {activeCategory === 'home' && (
             <div 
@@ -363,10 +380,21 @@ export default function Dashboard({
                   {i > 0 && <ChevronRight size={14} style={{ color: 'var(--n-text-light)' }} />}
                   <span 
                     onClick={() => setCurrentFolderId(b.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const fileId = e.dataTransfer.getData('text/plain');
+                      if (fileId && onMoveFile) {
+                        onMoveFile(fileId, b.id);
+                      }
+                    }}
+                    className="n-breadcrumb-dropzone"
                     style={{ 
                       cursor: 'pointer', 
                       color: b.id === currentFolderId ? 'var(--n-primary)' : 'inherit',
-                      fontWeight: b.id === currentFolderId ? '600' : 'normal'
+                      fontWeight: b.id === currentFolderId ? '600' : 'normal',
+                      padding: '2px 6px',
+                      borderRadius: '4px'
                     }}
                   >
                     {b.name}
@@ -416,6 +444,15 @@ export default function Dashboard({
                   <div
                     key={f.id}
                     onDoubleClick={() => setCurrentFolderId(f.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const fileId = e.dataTransfer.getData('text/plain');
+                      if (fileId && onMoveFile) {
+                        onMoveFile(fileId, f.id);
+                      }
+                    }}
+                    className="n-folder-dropzone"
                     style={{
                       background: 'white',
                       border: '1px solid var(--n-border)',
@@ -428,7 +465,7 @@ export default function Dashboard({
                       transition: 'all 0.2s',
                       position: 'relative'
                     }}
-                    title="Double click to enter folder"
+                    title="Double click to enter folder (or Drag & Drop a workspace here)"
                   >
                     <Folder size={18} style={{ color: 'var(--n-primary)', fill: 'var(--n-primary-light)' }} />
                     <span style={{ fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
@@ -455,6 +492,11 @@ export default function Dashboard({
                 key={doc.id}
                 onClick={() => onOpenDoc(doc.id)}
                 className="n-file-card animate-slide"
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', doc.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
               >
                 {/* Favorite Star */}
                 <button 

@@ -407,6 +407,132 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
     }
   };
 
+  const handleChangeLayout = (layoutType) => {
+    const canvas = fabricCanvas.current;
+    if (!canvas) return;
+
+    canvas.discardActiveObject();
+    canvas.clear();
+
+    const bgColor = currentSlide.bgColor || '#ffffff';
+    canvas.backgroundColor = bgColor;
+
+    if (layoutType === 'title-slide') {
+      const titleText = new window.fabric.Textbox('Click to add title', {
+        left: 100,
+        top: 120,
+        width: 600,
+        fontSize: 38,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        fill: '#0f172a',
+        fontFamily: 'Outfit'
+      });
+      const subtitleText = new window.fabric.Textbox('Click to add subtitle', {
+        left: 100,
+        top: 240,
+        width: 600,
+        fontSize: 18,
+        textAlign: 'center',
+        fill: '#475569',
+        fontFamily: 'Inter'
+      });
+      canvas.add(titleText);
+      canvas.add(subtitleText);
+    } else if (layoutType === 'title-body') {
+      const titleText = new window.fabric.Textbox('Section Header Title', {
+        left: 80,
+        top: 40,
+        width: 640,
+        fontSize: 30,
+        fontWeight: 'bold',
+        textAlign: 'left',
+        fill: '#0f172a',
+        fontFamily: 'Outfit'
+      });
+      const bodyText = new window.fabric.Textbox('• Bullet point description text goes here\n• Double-click to insert details\n• Press Enter to add new lines', {
+        left: 80,
+        top: 110,
+        width: 640,
+        fontSize: 16,
+        textAlign: 'left',
+        fill: '#334155',
+        fontFamily: 'Inter'
+      });
+      canvas.add(titleText);
+      canvas.add(bodyText);
+    } else if (layoutType === 'two-columns') {
+      const titleText = new window.fabric.Textbox('Comparing Core Frameworks', {
+        left: 80,
+        top: 40,
+        width: 640,
+        fontSize: 30,
+        fontWeight: 'bold',
+        textAlign: 'left',
+        fill: '#0f172a',
+        fontFamily: 'Outfit'
+      });
+      const col1 = new window.fabric.Textbox('Left Column Topic:\n\n• React components\n• Declared virtual DOM\n• High performance', {
+        left: 80,
+        top: 110,
+        width: 300,
+        fontSize: 14,
+        textAlign: 'left',
+        fill: '#334155',
+        fontFamily: 'Inter'
+      });
+      const col2 = new window.fabric.Textbox('Right Column Topic:\n\n• Vite tooling\n• HMR hot reload\n• Rolldown packaging', {
+        left: 420,
+        top: 110,
+        width: 300,
+        fontSize: 14,
+        textAlign: 'left',
+        fill: '#334155',
+        fontFamily: 'Inter'
+      });
+      canvas.add(titleText);
+      canvas.add(col1);
+      canvas.add(col2);
+    }
+
+    canvas.renderAll();
+    
+    const json = canvas.toJSON();
+    const elements = extractElements(canvas);
+    const updatedSlides = slidesRef.current.map((slide, idx) => {
+      if (idx === currentSlideIndex) {
+        return {
+          ...slide,
+          background: bgColor,
+          bgColor: bgColor,
+          layout: layoutType,
+          title: layoutType === 'blank' ? 'Blank Slide' : (canvas.getObjects('textbox')[0]?.text || slide.title),
+          subtitle: canvas.getObjects('textbox')[1]?.text || '',
+          fabricJSON: JSON.stringify(json),
+          elements: elements
+        };
+      }
+      return slide;
+    });
+
+    setSlides(updatedSlides);
+
+    const presentation = {
+      id: doc.id,
+      title: doc.name,
+      slides: updatedSlides,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (onSave) {
+      onSave(doc.id, presentation, 'slide-content-change');
+    }
+
+    if (onAddToast) {
+      onAddToast('Layout Changed', `Applied "${layoutType}" structure template.`, 'success');
+    }
+  };
+
   // Add editable textbox object
   const handleAddTextbox = () => {
     const canvas = fabricCanvas.current;
@@ -839,6 +965,25 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
                 <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--n-text-main)' }}>{theme.name}</span>
               </button>
             ))}
+          </div>
+        </div>
+
+        <div style={{ height: '1px', background: 'var(--n-border)', margin: '4px 0' }} />
+
+        <div className="properties-group">
+          <span className="properties-label">Slide Layout Template</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+            <select 
+              value={currentSlide.layout || 'blank'}
+              className="n-toolbar-select" 
+              style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+              onChange={(e) => handleChangeLayout(e.target.value)}
+            >
+              <option value="title-slide">Title Slide (Center title + subtitle)</option>
+              <option value="title-body">Title & Body (Header + description)</option>
+              <option value="two-columns">Two Columns (Title + comparison columns)</option>
+              <option value="blank">Blank Slide (Reset canvas)</option>
+            </select>
           </div>
         </div>
 

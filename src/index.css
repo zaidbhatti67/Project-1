@@ -1812,3 +1812,58 @@ ul[data-type="taskList"] input[type="checkbox"] {
   border-color: var(--n-border) !important;
 }
 
+/* ---------------------------------------------------- */
+/* DASHBOARD SUMMARY QUICK STATS                        */
+/* ---------------------------------------------------- */
+.n-stats-bar {
+  display: grid;
+  grid-template-cols: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.n-stat-card {
+  background: var(--n-bg-canvas);
+  border: 1px solid var(--n-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+
+.n-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--n-primary);
+}
+
+.n-stat-num {
+  font-size: 24px;
+  font-weight: 750;
+  color: var(--n-primary);
+  line-height: 1.1;
+}
+
+.n-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--n-text-sub);
+}
+
+/* Drag-and-drop targets feedback */
+.n-folder-dropzone:hover {
+  border-color: var(--n-primary) !important;
+  background: var(--n-primary-glow) !important;
+  box-shadow: 0 0 0 2px var(--n-primary-light);
+}
+
+.n-breadcrumb-dropzone:hover {
+  background: var(--n-primary-glow) !important;
+  color: var(--n-primary) !important;
+  font-weight: 600;
+}
+
