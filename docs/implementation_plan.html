@@ -25,72 +25,70 @@
     
     <main class="main-content">
       <section class="card">
-        <h1>Implementation Plan - Resolving Security &amp; Concurrency Failure Cases &amp; Dashboard Cleanup</h1>
-<p>This plan details the changes to resolve the critical failure cases and security vulnerabilities in the Nexus Workspace Suite, as well as the cleanup of the dashboard metrics bar.</p>
-<h2>User Review Required</h2>
-<p>&gt; [!IMPORTANT]</p>
-<p>&gt; **Dashboard UI Modification**:</p>
-<p>&gt; - We will **remove the entire Quick Metrics stats counter row** (<code>.n-stats-bar</code>) displaying Total Workspaces, Starred Files, and Directories from the Dashboard component.</p>
-<hr>
+        <h1>Implementation Plan - Resolving Failure Cases Batch 2</h1>
+<p>This plan details the implementation of security and stability improvements for the second batch of system failure cases:</p>
+<ul>
+<li>**Directory Tree IDOR Checks**: Validating folder ownership before file creations or movements.</li>
+<li>**Visual Style Sanitization**: Restricting raw HTML style injection defacement.</li>
+<li>**Safe Storage Wrapper**: Wrapping <code>localStorage</code> writes and reads to prevent crashes on disk exhaustion.</li>
+<li>**Spreadsheet Circular Reference Block**: Catching circular formula references in Luckysheet before they freeze the main UI thread.</li>
+</ul>
 <h2>Proposed Changes</h2>
-<h3>Backend Security, Authentication &amp; Rate Limiting</h3>
+<hr>
+<h3>Backend Security &amp; Sanitization</h3>
 <h4>[MODIFY] [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js)</h4>
 <ul>
-<li>**Environment Variables**: Use <code>process.env.JWT_SECRET</code> instead of the hardcoded secret, with the old secret as a development fallback.</li>
-<li>**Rate-Limiting Middleware**: Implement an in-memory IP-based rate limiter for <code>/api/auth/register</code> and <code>/api/auth/login</code> (allowing max 15 requests per minute).</li>
-<li>**Authorization Helper**: Implement a database check helper <code>checkFilePermission(fileId, userId, allowedRoles)</code> to check if a user is an owner, editor, or viewer of the given file.</li>
-<li>**REST Endpoints Authorization**:</li>
-<li><code>GET /api/files/:id</code>: Deny access if user has no view/edit role in permissions.</li>
-<li><code>PUT /api/files/:id</code>: Deny access if user has no edit/owner role. Also, implement **optimistic locking**: reject the update with a <code>409 Conflict</code> if the incoming <code>revision</code> is less than the database <code>revision</code>.</li>
-<li><code>DELETE /api/files/:id</code>: Deny access if user is not the file owner.</li>
-<li><code>POST /api/files/:id/permissions</code> (sharing): Deny access if user is not the file owner.</li>
-<li><code>GET/POST /api/files/:id/comments</code>: Deny access if user has no view/edit permission.</li>
-<li><code>DELETE /api/folders/:id</code>: Validate that the folder belongs to the logged-in user before deleting.</li>
-<li>**Socket.io Authentication Middleware**:</li>
-<li>Verify the JWT handshake token before establishing connection.</li>
-<li>On <code>join-room</code>, query the database to verify the user has access to that <code>fileId</code> room before allowing <code>socket.join</code>.</li>
+<li>**Folder IDOR Validation**:</li>
+<li>In <code>POST /api/files</code> and <code>PUT /api/files/:id</code>, if <code>folderId</code> is provided in the request payload, verify the folder exists and is owned by <code>req.user.id</code> before creating or updating the file record.</li>
+<li>**Style Sanitizer**:</li>
+<li>Implement a <code>sanitizeStyles(html)</code> helper function to strip out dangerous CSS properties (e.g. <code>position</code>, <code>z-index</code>, <code>top</code>, <code>display</code>) from document content strings, permitting only safe design attributes (<code>text-align</code>, <code>color</code>, <code>background-color</code>, <code>font-family</code>, <code>font-size</code>).</li>
+<li>Run this sanitizer in <code>PUT /api/files/:id</code> when the file type is <code>'docs'</code>.</li>
 </ul>
 <hr>
-<h3>Dashboard UI Cleanup</h3>
-<h4>[MODIFY] [Dashboard.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/Dashboard.jsx)</h4>
+<h3>Client Safe LocalStorage Wrapper</h3>
+<h4>[NEW] [storage.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/utils/storage.js)</h4>
 <ul>
-<li>Remove the entire <code>.n-stats-bar</code> Quick Metrics div (lines 345–359) to clean up the workspace presentation view.</li>
+<li>Create a utility file exporting <code>safeStorage</code> with <code>getItem</code>, <code>setItem</code>, and <code>removeItem</code> wrapped in <code>try-catch</code> blocks to prevent browser quota exhaustion crashes.</li>
+</ul>
+<h4>[MODIFY] [App.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/App.jsx)</h4>
+<h4>[MODIFY] [SettingsPanel.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SettingsPanel.jsx)</h4>
+<h4>[MODIFY] [Login.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/auth/Login.jsx)</h4>
+<h4>[MODIFY] [Register.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/auth/Register.jsx)</h4>
+<ul>
+<li>Import <code>safeStorage</code> and replace direct <code>localStorage</code> accesses to protect token and preference operations.</li>
 </ul>
 <hr>
-<h3>Client Socket Authentication</h3>
-<h4>[MODIFY] [socket.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/services/socket.js)</h4>
+<h3>Spreadsheet Circular Reference Prevention</h3>
+<h4>[MODIFY] [SheetsEditor.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SheetsEditor.jsx)</h4>
 <ul>
-<li>Update <code>connectSocket</code> to pass the local storage JWT token in the Socket.io <code>auth</code> handshake configuration:</li>
+<li>Implement <code>isCellInRange(cell, start, end)</code> and <code>isCircularReference(formula, cellId)</code> helpers.</li>
+<li>Register the <code>cellUpdateBefore</code> hook in <code>window.luckysheet.create()</code>:</li>
+<li>Intercept formulas starting with <code>=</code>.</li>
+<li>Validate that the formula does not reference the target cell directly or fall inside a range reference containing the cell coordinate.</li>
+<li>If a circular reference is caught, display an error Toast and return <code>false</code> to abort the change, saving the browser thread from locking up.</li>
 </ul>
-  <pre><code>  const token = localStorage.getItem('nexus_token');
-<p>  socket = io(SOCKET_URL, { auth: { token } });</p>
-  </code></pre>
 <hr>
 <h3>Documentation of Resolutions</h3>
-<h4>[NEW] [resolved_cases.md](file:///c:/Users/HP/Desktop/Zaid%20Project%202/docs/resolved_cases.md)</h4>
+<h4>[MODIFY] [resolved_cases.md](file:///c:/Users/HP/Desktop/Zaid%20Project%202/docs/resolved_cases.md)</h4>
 <ul>
-<li>Create a markdown document inside the <code>docs/</code> directory detailing how each failure case was successfully resolved.</li>
+<li>Append details of these new resolutions to the documentation.</li>
 </ul>
 <hr>
 <h2>Verification Plan</h2>
 <h3>Automated Verification</h3>
 <ul>
-<li>Verify the Vite compilation runs without errors:</li>
+<li>Verify that Vite compiled production files build cleanly:</li>
 </ul>
-  <pre><code>  npm.cmd run build
+  <pre><code>  npm run build
   </code></pre>
 <h3>Manual Verification</h3>
 <ul>
-<li>**Dashboard Check**: Load the dashboard. Verify that the stats bar (Total Workspaces, Starred Files, Directories) is completely removed and the layout adjusts cleanly.</li>
-<li>**Rate Limiting**: Attempt to hit the registration endpoint rapidly 15+ times. Verify that a <code>429 Too Many Requests</code> error is returned.</li>
-<li>**Access Control (IDOR)**:</li>
-<li>Create two accounts (User A and User B).</li>
-<li>Get the UUID of User A's private document.</li>
-<li>Using User B's token, attempt to edit (<code>PUT /api/files/:id</code>) or delete (<code>DELETE /api/files/:id</code>) User A's file. Verify the server returns <code>403 Forbidden</code>.</li>
-<li>**WebSockets Protection**:</li>
-<li>Attempt to connect an anonymous Socket.io client to a private file room. Verify that connection is rejected.</li>
-<li>**Optimistic Locking**:</li>
-<li>Manually trigger two quick edits with identical revisions. Verify that the second edit returns a <code>409 Conflict</code> and throws a "Save failed" toast in the UI.</li>
+<li>**Folder IDOR**: Attempt to create a file inside another user's folder UUID using a POST request. Verify it returns <code>403 Forbidden</code>.</li>
+<li>**Style Defacement**: Save a document containing <code>&lt;p style="position:fixed; z-index:9999; background:black;"&gt;Text&lt;/p&gt;</code>. Load the document, verify the dangerous inline styles are stripped and the page doesn't black out.</li>
+<li>**Circular Reference**:</li>
+<li>Open a spreadsheet and edit cell <code>A2</code>.</li>
+<li>Input <code>=SUM(A1:A3)</code> and hit enter.</li>
+<li>Verify that the cell update is blocked, the value reverts, and a "Circular reference detected in cell A2!" toast displays.</li>
 </ul>
       </section>
     </main>

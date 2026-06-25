@@ -49,3 +49,40 @@ This document registers the successfully resolved failure cases and security imp
   * Implemented an in-memory, IP-based authentication rate limiter for the `/api/auth/register` and `/api/auth/login` endpoints.
   * If a client IP submits more than 15 requests within 1 minute, the server rejects subsequent requests with a `429 Too Many Requests` error.
   * **Result**: Protects the server from CPU exhaustion attacks targeting high-work factor `bcrypt` hash algorithms.
+
+### Resolved Case 10: Style-Based Defacement HTML Sanitizer
+* **Resolution**:
+  * Implemented a `sanitizeStyles(html)` parser helper inside the backend server.
+  * During document save calls (`PUT /api/files/:id`), any raw HTML is scanned for `style` attributes. All dangerous positioning, sizing, or overlay properties (e.g. `position`, `z-index`, `top`, `display`) are stripped, whitelisting only safe design layout keys (`text-align`, `color`, `background-color`, `font-family`, `font-size`).
+  * **Result**: Prevents collaborator HTML styled-based screen blackouts and visual defacements.
+
+---
+
+## 5. Directory Tree Authorization (IDOR) Fixes
+
+### Resolved Case 9: Target Directory Ownership Verification
+* **Resolution**:
+  * Added active user verification when creating files (`POST /api/files`) or editing file locations (`PUT /api/files/:id` with `folderId`).
+  * The server queries the database to ensure the target `folderId` is owned by `req.user.id` before creating or updating the records.
+  * **Result**: Blocks users from injecting documents or subdirectories into other users' workspace folders.
+
+---
+
+## 6. Client Storage Quota Safeguards
+
+### Resolved Case 11: safeStorage LocalStorage Exception Wrapping
+* **Resolution**:
+  * Created a client-side wrapper utility [storage.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/utils/storage.js) wrapping `localStorage.getItem`, `setItem`, and `removeItem` inside `try-catch` exception handling wrappers.
+  * Replaced all direct `localStorage` accesses in the client files (`App.jsx`, `SettingsPanel.jsx`, `Login.jsx`, `Register.jsx`) with the `safeStorage` wrapper.
+  * **Result**: Prevents the application client from failing or crashing when storage quotes are exhausted or denied by the browser.
+
+---
+
+## 7. Sheet Formula Cycle Defenses
+
+### Resolved Case 12: Circular Reference Interception Hook
+* **Resolution**:
+  * Implemented circular formula detection helpers (`isCircularReference`, `isCellInRange`) in `SheetsEditor.jsx`.
+  * Wired these validators into Luckysheet's `cellUpdateBefore` hook.
+  * When a user inputs a formula (e.g. `=SUM(A1:A3)` inside cell `A2` or `A2 + 5`), the hook detects the self-referencing coordinate, halts the change (returning `false`), and displays a Toast alerting the user.
+  * **Result**: Saves the browser thread from infinite formula calculation loop locks.

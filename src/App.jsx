@@ -18,6 +18,7 @@ import SheetsEditor from './components/SheetsEditor';
 import SheetsEditorLocal from './components/SheetsEditor'; // Fallback
 import SlidesEditor from './components/SlidesEditor';
 import CollabSimPanel from './components/CollabSimPanel';
+import { safeStorage } from './utils/storage';
 import ShareModal from './components/ShareModal';
 import SettingsPanel from './components/SettingsPanel';
 import CommandPalette from './components/CommandPalette';
@@ -94,10 +95,10 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [authToken, setAuthToken] = useState(localStorage.getItem('nexus_token'));
+  const [authToken, setAuthToken] = useState(safeStorage.getItem('nexus_token'));
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const u = localStorage.getItem('nexus_user');
+      const u = safeStorage.getItem('nexus_user');
       return u ? JSON.parse(u) : null;
     } catch (e) {
       return null;
@@ -165,13 +166,13 @@ export default function App() {
   // JWT validation on startup
   useEffect(() => {
     const checkSession = async () => {
-      const token = localStorage.getItem('nexus_token');
+      const token = safeStorage.getItem('nexus_token');
       if (token) {
         try {
           const profile = await api.getProfile();
           setAuthToken(token);
           setCurrentUser(profile.user);
-          localStorage.setItem('nexus_user', JSON.stringify(profile.user));
+          safeStorage.setItem('nexus_user', JSON.stringify(profile.user));
           loadWorkspaceData();
         } catch (err) {
           handleLogout();
@@ -182,7 +183,7 @@ export default function App() {
   }, [authToken]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('nexus_theme') || 'light';
+    const savedTheme = safeStorage.getItem('nexus_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
@@ -205,8 +206,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('nexus_token');
-    localStorage.removeItem('nexus_user');
+    safeStorage.removeItem('nexus_token');
+    safeStorage.removeItem('nexus_user');
     setAuthToken(null);
     setCurrentUser(null);
     disconnectSocket();

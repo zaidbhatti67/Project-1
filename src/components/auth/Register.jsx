@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { Mail, Lock, User } from 'lucide-react';
 
+import { safeStorage } from '../../utils/storage';
+
 export default function Register({ onAuthSuccess, onToggleLogin, onAddToast }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,8 +25,8 @@ export default function Register({ onAuthSuccess, onToggleLogin, onAddToast }) {
     setLoading(true);
     try {
       const data = await api.register(email, password, name);
-      localStorage.setItem('nexus_token', data.token);
-      localStorage.setItem('nexus_user', JSON.stringify(data.user));
+      safeStorage.setItem('nexus_token', data.token);
+      safeStorage.setItem('nexus_user', JSON.stringify(data.user));
       
       if (onAddToast) {
         onAddToast('Account Created', `Successfully registered as ${data.user.name}.`, 'success');

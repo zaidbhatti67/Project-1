@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Settings, X, Palette, User, Sliders, Moon, Sun, Check } from 'lucide-react';
 import { api } from '../services/api';
 
+import { safeStorage } from '../utils/storage';
+
 export default function SettingsPanel({ isOpen, onClose, onAddToast, currentUser, onUpdateUser }) {
   const [activeTab, setActiveTab] = useState('general');
   const [autoSave, setAutoSave] = useState(true);
@@ -15,13 +17,13 @@ export default function SettingsPanel({ isOpen, onClose, onAddToast, currentUser
 
   useEffect(() => {
     if (isOpen) {
-      setAutoSave(localStorage.getItem('nexus_autosave') !== 'false');
-      setTheme(localStorage.getItem('nexus_theme') || 'light');
-      setZoom(localStorage.getItem('nexus_zoom') || '100');
+      setAutoSave(safeStorage.getItem('nexus_autosave') !== 'false');
+      setTheme(safeStorage.getItem('nexus_theme') || 'light');
+      setZoom(safeStorage.getItem('nexus_zoom') || '100');
       setUserProfile({
         name: currentUser?.name || 'Zaid',
         email: currentUser?.email || 'zaid@university.edu',
-        organization: localStorage.getItem('nexus_organization') || 'Faculty of Computer Science'
+        organization: safeStorage.getItem('nexus_organization') || 'Faculty of Computer Science'
       });
     }
   }, [isOpen, currentUser]);
@@ -30,10 +32,10 @@ export default function SettingsPanel({ isOpen, onClose, onAddToast, currentUser
 
   const handleSaveSettings = async () => {
     try {
-      localStorage.setItem('nexus_autosave', String(autoSave));
-      localStorage.setItem('nexus_theme', theme);
-      localStorage.setItem('nexus_zoom', zoom);
-      localStorage.setItem('nexus_organization', userProfile.organization);
+      safeStorage.setItem('nexus_autosave', String(autoSave));
+      safeStorage.setItem('nexus_theme', theme);
+      safeStorage.setItem('nexus_zoom', zoom);
+      safeStorage.setItem('nexus_organization', userProfile.organization);
 
       // Apply theme immediately to HTML element
       document.documentElement.setAttribute('data-theme', theme);
@@ -41,8 +43,8 @@ export default function SettingsPanel({ isOpen, onClose, onAddToast, currentUser
       // Call backend PUT profile update
       if (api.updateProfile) {
         const result = await api.updateProfile(userProfile.name, userProfile.email);
-        localStorage.setItem('nexus_token', result.token);
-        localStorage.setItem('nexus_user', JSON.stringify(result.user));
+        safeStorage.setItem('nexus_token', result.token);
+        safeStorage.setItem('nexus_user', JSON.stringify(result.user));
         
         if (onUpdateUser) {
           onUpdateUser(result.user);

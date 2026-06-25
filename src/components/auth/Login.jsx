@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { Shield, Mail, Lock } from 'lucide-react';
 
+import { safeStorage } from '../../utils/storage';
+
 export default function Login({ onAuthSuccess, onToggleRegister, onAddToast }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,8 +19,8 @@ export default function Login({ onAuthSuccess, onToggleRegister, onAddToast }) {
     setLoading(true);
     try {
       const data = await api.login(email, password);
-      localStorage.setItem('nexus_token', data.token);
-      localStorage.setItem('nexus_user', JSON.stringify(data.user));
+      safeStorage.setItem('nexus_token', data.token);
+      safeStorage.setItem('nexus_user', JSON.stringify(data.user));
       
       if (onAddToast) {
         onAddToast('Welcome back', `Logged in successfully as ${data.user.name}.`, 'success');

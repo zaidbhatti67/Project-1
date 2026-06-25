@@ -2,6 +2,43 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getSocket, emitSelection } from '../services/socket';
 import { isCellReference, cellToIndices, indicesToCell } from '../engine/formulaEvaluator';
 
+// --- SPREADSHEET CIRCULAR REFERENCE VALIDATOR ---
+const isCellInRange = (cell, start, end) => {
+  const cIdx = cellToIndices(cell);
+  const sIdx = cellToIndices(start);
+  const eIdx = cellToIndices(end);
+  if (!cIdx || !sIdx || !eIdx) return false;
+  
+  const minRow = Math.min(sIdx.row, eIdx.row);
+  const maxRow = Math.max(sIdx.row, eIdx.row);
+  const minCol = Math.min(sIdx.col, eIdx.col);
+  const maxCol = Math.max(sIdx.col, eIdx.col);
+  
+  return cIdx.row >= minRow && cIdx.row <= maxRow && cIdx.col >= minCol && cIdx.col <= maxCol;
+};
+
+const isCircularReference = (formula, cellId) => {
+  if (typeof formula !== 'string' || !formula.startsWith('=')) return false;
+  
+  const upperFormula = formula.toUpperCase();
+  const targetCell = cellId.toUpperCase();
+  
+  // Direct check
+  const cellRefRegex = new RegExp(`\\b${targetCell}\\b`, 'i');
+  if (cellRefRegex.test(upperFormula)) return true;
+
+  // Range check
+  const rangeRegex = /([A-Z]+[0-9]+):([A-Z]+[0-9]+)/gi;
+  let match;
+  while ((match = rangeRegex.exec(upperFormula)) !== null) {
+    const startCell = match[1];
+    const endCell = match[2];
+    if (isCellInRange(targetCell, startCell, endCell)) return true;
+  }
+
+  return false;
+};
+
 export default function SheetsEditor({ doc, onSave, simulatedEdits, otEngine, onAddToast }) {
   const containerId = 'luckysheet-container';
   const saveTimeoutRef = useRef(null);
@@ -135,6 +172,24 @@ export default function SheetsEditor({ doc, onSave, simulatedEdits, otEngine, on
       hook: {
         workbookCreateAfter: () => {
           setIsReady(true);
+        },
+        cellUpdateBefore: (r, c, value) => {
+          const cellId = indicesToCell(r, c);
+          let formula = '';
+          if (typeof value === 'object' && value !== null) {
+            formula = value.f || '';
+          } else if (typeof value === 'string') {
+            formula = value;
+          }
+          if (formula.startsWith('=')) {
+            if (isCircularReference(formula, cellId)) {
+              if (onAddToast) {
+                onAddToast('Formula Error', `Circular reference detected in cell ${cellId}! Calculation aborted.`, 'error');
+              }
+              return false;
+            }
+          }
+          return true;
         },
         cellUpdated: () => {
           debouncedSave();

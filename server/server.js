@@ -50,6 +50,23 @@ const checkFilePermission = async (fileId, userId, allowedRoles = []) => {
   return allowedRoles.includes(perm.role);
 };
 
+// --- STYLE SANITIZER HELPER FOR XSS/DEFACEMENT PREVENTION ---
+const sanitizeStyles = (html) => {
+  if (typeof html !== 'string') return html;
+  return html.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+    const cleanStyles = styleContent.split(';')
+      .map(style => style.trim())
+      .filter(style => {
+        const parts = style.split(':');
+        if (parts.length !== 2) return false;
+        const key = parts[0].trim().toLowerCase();
+        return ['text-align', 'color', 'background-color', 'font-family', 'font-size'].includes(key);
+      })
+      .join('; ');
+    return cleanStyles ? `style="${cleanStyles}"` : '';
+  });
+};
+
 app.use(cors());
 app.use(express.json());
 
@@ -294,6 +311,19 @@ app.post('/api/files', authenticateToken, async (req, res) => {
   const { name, type, folderId } = req.body;
   if (!name || !type) return res.status(400).json({ error: 'File name and type are required' });
   
+  if (folderId) {
+    try {
+      const targetFolder = await prisma.folder.findFirst({
+        where: { id: folderId, ownerId: req.user.id }
+      });
+      if (!targetFolder) {
+        return res.status(403).json({ error: 'Access denied: Target folder does not belong to you' });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: 'Folder verification failed: ' + e.message });
+    }
+  }
+  
   let defaultContent = '';
   if (type === 'sheets') {
     defaultContent = JSON.stringify({ A1: { rawValue: '0' } });
@@ -351,13 +381,23 @@ app.get('/api/files/:id', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/files/:id', authenticateToken, async (req, res) => {
-  const { name, content, revision } = req.body;
+  const { name, content, revision, folderId } = req.body;
   try {
     const file = await prisma.file.findUnique({ where: { id: req.params.id } });
     if (!file) return res.status(404).json({ error: 'File not found' });
 
     const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor']);
     if (!isAllowed) return res.status(403).json({ error: 'Access denied: You do not have permission to modify this file' });
+
+    // Validate target folder ownership if folder is changing
+    if (folderId) {
+      const targetFolder = await prisma.folder.findFirst({
+        where: { id: folderId, ownerId: req.user.id }
+      });
+      if (!targetFolder) {
+        return res.status(403).json({ error: 'Access denied: Target folder does not belong to you' });
+      }
+    }
 
     // Optimistic concurrency locking check
     if (revision !== undefined && file.revision > revision) {
@@ -369,8 +409,15 @@ app.put('/api/files/:id', authenticateToken, async (req, res) => {
 
     const updateData = {};
     if (name) updateData.name = name;
-    if (content !== undefined) updateData.content = content;
+    if (content !== undefined) {
+      if (file.type === 'docs') {
+        updateData.content = sanitizeStyles(content);
+      } else {
+        updateData.content = content;
+      }
+    }
     if (revision) updateData.revision = revision;
+    if (folderId !== undefined) updateData.folderId = folderId;
     
     const updatedFile = await prisma.file.update({
       where: { id: req.params.id },

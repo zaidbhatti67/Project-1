@@ -72,6 +72,41 @@
 <li>If a client IP submits more than 15 requests within 1 minute, the server rejects subsequent requests with a <code>429 Too Many Requests</code> error.</li>
 <li>**Result**: Protects the server from CPU exhaustion attacks targeting high-work factor <code>bcrypt</code> hash algorithms.</li>
 </ul>
+<h3>Resolved Case 10: Style-Based Defacement HTML Sanitizer</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Implemented a <code>sanitizeStyles(html)</code> parser helper inside the backend server.</li>
+<li>During document save calls (<code>PUT /api/files/:id</code>), any raw HTML is scanned for <code>style</code> attributes. All dangerous positioning, sizing, or overlay properties (e.g. <code>position</code>, <code>z-index</code>, <code>top</code>, <code>display</code>) are stripped, whitelisting only safe design layout keys (<code>text-align</code>, <code>color</code>, <code>background-color</code>, <code>font-family</code>, <code>font-size</code>).</li>
+<li>**Result**: Prevents collaborator HTML styled-based screen blackouts and visual defacements.</li>
+</ul>
+<hr>
+<h2>5. Directory Tree Authorization (IDOR) Fixes</h2>
+<h3>Resolved Case 9: Target Directory Ownership Verification</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Added active user verification when creating files (<code>POST /api/files</code>) or editing file locations (<code>PUT /api/files/:id</code> with <code>folderId</code>).</li>
+<li>The server queries the database to ensure the target <code>folderId</code> is owned by <code>req.user.id</code> before creating or updating the records.</li>
+<li>**Result**: Blocks users from injecting documents or subdirectories into other users' workspace folders.</li>
+</ul>
+<hr>
+<h2>6. Client Storage Quota Safeguards</h2>
+<h3>Resolved Case 11: safeStorage LocalStorage Exception Wrapping</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Created a client-side wrapper utility [storage.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/utils/storage.js) wrapping <code>localStorage.getItem</code>, <code>setItem</code>, and <code>removeItem</code> inside <code>try-catch</code> exception handling wrappers.</li>
+<li>Replaced all direct <code>localStorage</code> accesses in the client files (<code>App.jsx</code>, <code>SettingsPanel.jsx</code>, <code>Login.jsx</code>, <code>Register.jsx</code>) with the <code>safeStorage</code> wrapper.</li>
+<li>**Result**: Prevents the application client from failing or crashing when storage quotes are exhausted or denied by the browser.</li>
+</ul>
+<hr>
+<h2>7. Sheet Formula Cycle Defenses</h2>
+<h3>Resolved Case 12: Circular Reference Interception Hook</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Implemented circular formula detection helpers (<code>isCircularReference</code>, <code>isCellInRange</code>) in <code>SheetsEditor.jsx</code>.</li>
+<li>Wired these validators into Luckysheet's <code>cellUpdateBefore</code> hook.</li>
+<li>When a user inputs a formula (e.g. <code>=SUM(A1:A3)</code> inside cell <code>A2</code> or <code>A2 + 5</code>), the hook detects the self-referencing coordinate, halts the change (returning <code>false</code>), and displays a Toast alerting the user.</li>
+<li>**Result**: Saves the browser thread from infinite formula calculation loop locks.</li>
+</ul>
       </section>
     </main>
   </div>
