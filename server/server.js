@@ -16,8 +16,39 @@ const io = new Server(server, {
   }
 });
 
-const JWT_SECRET = 'nexus-super-secret-key-12345';
+const JWT_SECRET = process.env.JWT_SECRET || 'nexus-super-secret-key-12345';
 const PORT = process.env.PORT || 3001;
+
+// --- AUTH RATE LIMITER ---
+const authAttempts = new Map();
+const authRateLimiter = (req, res, next) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const now = Date.now();
+  const timeframe = 60 * 1000; // 1 minute
+  const maxRequests = 15;
+
+  if (!authAttempts.has(ip)) {
+    authAttempts.set(ip, []);
+  }
+
+  const timestamps = authAttempts.get(ip).filter(t => now - t < timeframe);
+  timestamps.push(now);
+  authAttempts.set(ip, timestamps);
+
+  if (timestamps.length > maxRequests) {
+    return res.status(429).json({ error: 'Too many authentication attempts. Please try again in 1 minute.' });
+  }
+  next();
+};
+
+// --- FILE AUTHORIZATION HELPER ---
+const checkFilePermission = async (fileId, userId, allowedRoles = []) => {
+  const perm = await prisma.permission.findFirst({
+    where: { fileId, userId }
+  });
+  if (!perm) return false;
+  return allowedRoles.includes(perm.role);
+};
 
 app.use(cors());
 app.use(express.json());
@@ -37,7 +68,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // --- AUTH ROUTER ---
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimiter, async (req, res) => {
   const { email, password, name } = req.body;
   
   if (!email || !password || !name) {
@@ -117,7 +148,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimiter, async (req, res) => {
   const { email, password } = req.body;
   
   if (!email || !password) {
@@ -214,6 +245,11 @@ app.post('/api/folders', authenticateToken, async (req, res) => {
 
 app.delete('/api/folders/:id', authenticateToken, async (req, res) => {
   try {
+    const folder = await prisma.folder.findUnique({ where: { id: req.params.id } });
+    if (!folder) return res.status(404).json({ error: 'Folder not found' });
+    if (folder.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied: You do not own this folder' });
+    }
     await prisma.folder.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {
@@ -295,6 +331,9 @@ app.post('/api/files', authenticateToken, async (req, res) => {
 
 app.get('/api/files/:id', authenticateToken, async (req, res) => {
   try {
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied: You do not have permission to view this file' });
+
     const file = await prisma.file.findUnique({
       where: { id: req.params.id },
       include: {
@@ -314,17 +353,31 @@ app.get('/api/files/:id', authenticateToken, async (req, res) => {
 app.put('/api/files/:id', authenticateToken, async (req, res) => {
   const { name, content, revision } = req.body;
   try {
+    const file = await prisma.file.findUnique({ where: { id: req.params.id } });
+    if (!file) return res.status(404).json({ error: 'File not found' });
+
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied: You do not have permission to modify this file' });
+
+    // Optimistic concurrency locking check
+    if (revision !== undefined && file.revision > revision) {
+      return res.status(409).json({
+        error: 'Conflict: This document has been modified by another collaborator. Please refresh.',
+        currentRevision: file.revision
+      });
+    }
+
     const updateData = {};
     if (name) updateData.name = name;
     if (content !== undefined) updateData.content = content;
     if (revision) updateData.revision = revision;
     
-    const file = await prisma.file.update({
+    const updatedFile = await prisma.file.update({
       where: { id: req.params.id },
       data: updateData
     });
     
-    res.json(file);
+    res.json(updatedFile);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -332,6 +385,9 @@ app.put('/api/files/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/files/:id/duplicate', authenticateToken, async (req, res) => {
   try {
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied: You do not have permission to duplicate this file' });
+
     const original = await prisma.file.findUnique({ where: { id: req.params.id } });
     if (!original) return res.status(404).json({ error: 'Original file not found' });
     
@@ -362,6 +418,13 @@ app.post('/api/files/:id/duplicate', authenticateToken, async (req, res) => {
 
 app.delete('/api/files/:id', authenticateToken, async (req, res) => {
   try {
+    const file = await prisma.file.findUnique({ where: { id: req.params.id } });
+    if (!file) return res.status(404).json({ error: 'File not found' });
+
+    if (file.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied: Only the owner can delete this file' });
+    }
+
     await prisma.file.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {
@@ -371,6 +434,9 @@ app.delete('/api/files/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/files/:id/star', authenticateToken, async (req, res) => {
   try {
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied' });
+
     const file = await prisma.file.findUnique({ where: { id: req.params.id } });
     if (!file) return res.status(404).json({ error: 'File not found' });
     
@@ -385,10 +451,16 @@ app.post('/api/files/:id/star', authenticateToken, async (req, res) => {
   }
 });
 
-// --- SHARING PERMISSIONS ROUTER ---
 app.post('/api/files/:id/permissions', authenticateToken, async (req, res) => {
   const { email, role } = req.body;
   try {
+    const file = await prisma.file.findUnique({ where: { id: req.params.id } });
+    if (!file) return res.status(404).json({ error: 'File not found' });
+
+    if (file.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied: Only the owner can share this file' });
+    }
+
     const inviteUser = await prisma.user.findUnique({ where: { email } });
     if (!inviteUser) return res.status(404).json({ error: 'No user registered with this email address' });
     
@@ -406,9 +478,11 @@ app.post('/api/files/:id/permissions', authenticateToken, async (req, res) => {
   }
 });
 
-// --- COMMENTS ROUTER ---
 app.get('/api/files/:id/comments', authenticateToken, async (req, res) => {
   try {
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied' });
+
     const comments = await prisma.comment.findMany({
       where: { fileId: req.params.id },
       include: { author: true }
@@ -424,6 +498,9 @@ app.post('/api/files/:id/comments', authenticateToken, async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Comment text is required' });
   
   try {
+    const isAllowed = await checkFilePermission(req.params.id, req.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied' });
+
     const comment = await prisma.comment.create({
       data: {
         fileId: req.params.id,
@@ -441,23 +518,50 @@ app.post('/api/files/:id/comments', authenticateToken, async (req, res) => {
 
 app.put('/api/comments/:id/resolve', authenticateToken, async (req, res) => {
   try {
-    const comment = await prisma.comment.update({
+    const comment = await prisma.comment.findUnique({
+      where: { id: req.params.id }
+    });
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const isAllowed = await checkFilePermission(comment.fileId, req.user.id, ['owner', 'editor']);
+    if (!isAllowed) return res.status(403).json({ error: 'Access denied: Only owner or editor can resolve comments' });
+
+    const updatedComment = await prisma.comment.update({
       where: { id: req.params.id },
       data: { resolved: true }
     });
-    res.json(comment);
+    res.json(updatedComment);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // --- WEBSOCKET REAL-TIME SYNC LOGIC ---
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.headers['authorization']?.split(' ')[1];
+  if (!token) {
+    return next(new Error('Authentication error: Token required'));
+  }
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return next(new Error('Authentication error: Invalid token'));
+    socket.user = decoded;
+    next();
+  });
+});
+
 io.on('connection', (socket) => {
-  console.log('Client socket connected:', socket.id);
+  console.log('Client socket connected with auth user:', socket.user.email, socket.id);
   
-  socket.on('join-room', ({ fileId, username }) => {
+  socket.on('join-room', async ({ fileId, username }) => {
+    // Check permission
+    const isAllowed = await checkFilePermission(fileId, socket.user.id, ['owner', 'editor', 'viewer']);
+    if (!isAllowed) {
+      console.log(`Unauthorized socket room join attempt by user id ${socket.user.id} for file ${fileId}`);
+      return;
+    }
+    
     socket.join(fileId);
-    console.log(`User "${username}" joined collaboration room for file: ${fileId}`);
+    console.log(`User "${username}" (ID: ${socket.user.id}) joined collaboration room for file: ${fileId}`);
     socket.to(fileId).emit('peer-joined', { username });
   });
   

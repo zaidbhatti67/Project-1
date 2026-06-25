@@ -342,21 +342,7 @@ export default function Dashboard({
             </p>
           </div>
 
-          {/* Quick Metrics stats counter row */}
-          <div className="n-stats-bar animate-fade">
-            <div className="n-stat-card">
-              <span className="n-stat-num">{documents.length}</span>
-              <span className="n-stat-label">Total Workspaces</span>
-            </div>
-            <div className="n-stat-card">
-              <span className="n-stat-num">{documents.filter(d => d.isFavorite).length}</span>
-              <span className="n-stat-label">Starred Files</span>
-            </div>
-            <div className="n-stat-card">
-              <span className="n-stat-num">{folders.length}</span>
-              <span className="n-stat-label">Directories</span>
-            </div>
-          </div>
+
 
           {/* Breadcrumb Navigation Trail */}
           {activeCategory === 'home' && (

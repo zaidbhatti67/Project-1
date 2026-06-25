@@ -9,7 +9,10 @@ export const connectSocket = (fileId, username) => {
     socket.disconnect();
   }
 
-  socket = io(SOCKET_URL);
+  const token = localStorage.getItem('nexus_token');
+  socket = io(SOCKET_URL, {
+    auth: { token }
+  });
 
   socket.on('connect', () => {
     console.log('Socket connected to server rooms successfully:', socket.id);
