@@ -1,49 +1,52 @@
-# Walkthrough: Google Workspace Clone Fixes, Settings Panel & Git Setup
+# Walkthrough: Resolved Failure Cases, Security Hardening & UI Cleanup
 
-We have successfully resolved the settings panel functionality, spreadsheet layout rendering collapse, and configured a local Git repository ready for remote synchronization.
+We have successfully resolved the critical security vulnerabilities (IDOR, anonymous sockets, auth spamming), concurrency sync conflicts (optimistic locking), and cleaned up the dashboard UI by removing the Quick Metrics stats bar.
 
 ---
 
 ## 🛠️ Implementation Summary
 
-### 1. Spreadsheet Layout Rendering Fix
-*   **Grid CSS Layouts**: 
-    *   Added styles for `.g-split-workspace`, `.g-editor-canvas-column`, `.g-side-dock`, and `.g-side-panel` in [index.css](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/index.css).
-    *   This resolves the spreadsheet display collapse issue where the Luckysheet container rendered at `0px` height due to unstyled container dimensions.
+### 1. Access Control & IDOR Protection
+*   **File Modified**: [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js#L296)
+*   **Change**: Implemented database ownership and collaborator permission checks inside all file/folder read, edit, delete, duplication, and star routes.
+*   **Result**: Attempts by unauthorized users to access private folders or documents are rejected with a `403 Forbidden` response.
 
-### 2. Functional Settings Panel
-*   **Visual Theme (Dark Mode)**:
-    *   Toggling "Dark Slate" visual theme inside [SettingsPanel.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/SettingsPanel.jsx) applies a `[data-theme="dark"]` attribute selector directly to the HTML document element in real time.
-    *   We added visual variable overrides in `index.css` for a premium slate dark theme, immediately styling the dashboard, modals, side panel logs, toolbars, input fields, and rich text editors, persisting on page refresh.
-*   **Cloud Auto-save Control**:
-    *   Toggling off "Cloud Auto-save" bypasses all background typing debounces and canvas edits in Docs, Sheets, and Slides.
-    *   Manual/structural saves (such as reordering, deletions, and exiting via the universal `← Dashboard` button) continue to sync to prevent data loss.
-*   **Default Zoom Ratio**:
-    *   Saving a zoom ratio preference (90%, 100%, 110%) updates `localStorage` and initializes the Document Editor's default scale layout.
-*   **User Profile Updates**:
-    *   Updating name or email in Settings triggers a PUT call to the new `/api/auth/profile` route in [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js).
-    *   This updates the SQLite database record, issues a fresh JWT token, updates `localStorage`, and instantly refreshes user avatar indicators in the top header.
+### 2. Authenticated WebSockets
+*   **File Modified**: [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js#L540)
+    *   Enforced handshake verification using active JWT authorization tokens.
+    *   Added database collaborator check on the `join-room` listener to deny unauthorized room subscriptions.
+*   **File Modified**: [socket.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/services/socket.js#L12)
+    *   Passed the stored JWT auth token inside the connection handshake parameter configuration.
+*   **Result**: Blocks anonymous socket links from sniffing edit streams or injecting malicious events.
 
-### 3. Git Repository Configuration
-*   Initialized a local Git repository and configured local author information:
-    *   Email: `zaid@university.edu`
-    *   Name: `Zaid`
-*   Created database ignoring patterns in `.gitignore` to prevent committing SQLite binary files (`*.db`, `*.db-journal`, `*.sqlite`, `.env`).
-*   Committed all source files, documentation, and metadata configurations locally under branch `main` with remote origin set to `https://github.com/zaidbhatti67/Project-1.git`.
+### 3. Concurrency Control (Optimistic Locking)
+*   **File Modified**: [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js#L350)
+    *   Introduced optimistic revision validation on files updates (`PUT /api/files/:id`). Edits are rejected with a `409 Conflict` if the incoming client revision is older than the current database state.
+*   **Result**: Users typing simultaneously are prevented from accidentally overwriting other collaborators' work.
+
+### 4. Denial of Service (DoS) Prevention
+*   **File Modified**: [server.js](file:///c:/Users/HP/Desktop/Zaid%20Project%202/server/server.js#L20)
+    *   Implemented IP-based rate limiting on `/api/auth/register` and `/api/auth/login` (limiting clients to a maximum of 15 auth requests per minute).
+*   **Result**: Protects server CPU cores from registration/login brute-force exhaustion attacks.
+
+### 5. UI Dashboard Cleanup
+*   **File Modified**: [Dashboard.jsx](file:///c:/Users/HP/Desktop/Zaid%20Project%202/src/components/Dashboard.jsx#L345)
+    *   Removed the entire `.n-stats-bar` Quick Metrics counter block to improve workspace presentation aesthetics.
 
 ---
 
 ## 🚀 Verification Results
 
-### Production Compilation Build Check
-Vite compilation of all assets successfully finished:
+### Production Compilation check
+Vite assets compiled successfully:
 ```powershell
-vite v8.1.0 building client environment for production...
-transforming...✓ 215 modules transformed.
-rendering chunks...
-computing gzip size...
 dist/index.html                   1.29 kB │ gzip:   0.48 kB
-dist/assets/index-qPpoVqjn.css   29.84 kB │ gzip:   5.50 kB
-dist/assets/index-WbFqgUFo.js   849.63 kB │ gzip: 255.44 kB
-✓ built in 644ms
+dist/assets/index-CRU8fJLn.css   30.71 kB │ gzip:   5.62 kB
+dist/assets/index-DHyA2iPE.js   853.19 kB │ gzip: 256.21 kB
+✓ built in 707ms
 ```
+
+### Git Repository Synchronization
+*   Pushed all changes to GitHub: [https://github.com/zaidbhatti67/Project-1](https://github.com/zaidbhatti67/Project-1)
+*   Baseline vulnerability log: [docs/failure_cases.md](file:///c:/Users/HP/Desktop/Zaid%20Project%202/docs/failure_cases.md)
+*   Resolution log: [docs/resolved_cases.md](file:///c:/Users/HP/Desktop/Zaid%20Project%202/docs/resolved_cases.md)

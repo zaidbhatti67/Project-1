@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resolved Cases - Nexus Docs</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span>✦</span> Nexus Docs
+      </div>
+      <ul class="nav-links">
+        <li><a href="./implementation_plan.html">Implementation Plan</a></li>
+        <li><a href="./uml_diagrams.html">UML Diagrams</a></li>
+        <li><a href="./design_specification_psp.html">PSP Design Specs</a></li>
+        <li><a href="./failure_cases.html">Failure Cases</a></li>
+        <li><a href="./resolved_cases.html" class="active">Resolved Cases</a></li>
+        <li><a href="./walkthrough.html">Walkthrough Guide</a></li>
+        <li><a href="./chat_history.html">Chat History</a></li>
+      </ul>
+    </aside>
+    
+    <main class="main-content">
+      <section class="card">
+        <h1>Resolved Failure Cases &amp; Security Hardening: Nexus Suite</h1>
+<p>This document registers the successfully resolved failure cases and security improvements implemented in the Nexus Workspace Suite.</p>
+<hr>
+<h2>1. Authentication &amp; Access Control (IDOR &amp; WebSocket Bypasses)</h2>
+<h3>Resolved Case 1: Insecure Direct Object References (IDOR) on REST API</h3>
+<ul>
+<li>**Resolution**: Added folder/file authorization checks in the Express REST endpoints:</li>
+<li>**Ownership Check**: Before deleting files (<code>DELETE /api/files/:id</code>) or folders (<code>DELETE /api/folders/:id</code>), the server checks if the user is the original owner.</li>
+<li>**View/Edit Check**: Before viewing (<code>GET /api/files/:id</code>), duplicating, or altering starring preferences, the server checks the <code>Permission</code> table to ensure the user is an owner, editor, or viewer.</li>
+<li>**Edit/Owner Check**: Before editing (<code>PUT /api/files/:id</code>), the server validates that the user is either the owner or an editor.</li>
+<li>**Result**: Any unauthorized attempts to read, write, or delete documents return a standard <code>403 Forbidden</code> status.</li>
+</ul>
+<h3>Resolved Case 2: Authenticated WebSockets &amp; Room Authorization</h3>
+<ul>
+<li>**Resolution**: </li>
+<li>Configured Socket.io server-side handshake middleware to parse and verify the JWT auth token before accepting websocket connections.</li>
+<li>Modified the client-side socket connection helper in <code>src/services/socket.js</code> to transmit the active JWT token via the <code>auth</code> configuration parameter.</li>
+<li>Updated the backend <code>join-room</code> event listener to query the <code>Permission</code> database table, allowing connection only if the user is a registered collaborator.</li>
+<li>**Result**: Anonymous users are blocked from listening to or sending workspace event edits.</li>
+</ul>
+<hr>
+<h2>2. Concurrency &amp; Data Synchronization Fixes</h2>
+<h3>Resolved Case 3 &amp; 4: Optimistic Concurrency Locking</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Implemented an **Optimistic Revision Check** in the file edit API endpoint (<code>PUT /api/files/:id</code>).</li>
+<li>When a client saves edits, the server compares the incoming <code>revision</code> against the current database <code>revision</code>. If the database revision is higher (indicating another user saved first), the server rejects the update with a <code>409 Conflict</code> status and sends back the current database state.</li>
+<li>The frontend catches the error and throws a "Save failed: Conflict" toast, prompting the user to refresh instead of silently overwriting.</li>
+</ul>
+<hr>
+<h2>3. Database Persistence &amp; Scaling Upgrades</h2>
+<h3>Resolved Case 5 &amp; 6: Unified Full-Stack Docker Deployment</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Bundled the Vite static assets to be served directly by the Express Node.js application (using a wildcard path fallback to <code>dist/index.html</code>).</li>
+<li>Created a multi-stage <code>Dockerfile</code> making the entire project deployable as a single container on Hugging Face Spaces (using its free, card-less CPU tiers).</li>
+<li>Enforced relative paths (<code>/api</code> and <code>/</code>) as defaults for production, ensuring zero-config deployments, while keeping Vite dev proxies active for local <code>npm run dev</code> routing.</li>
+</ul>
+<hr>
+<h2>4. Input Validation &amp; Resilience Upgrades</h2>
+<h3>Resolved Case 8: CPU Exhaustion / DoS Protection via Rate Limiting</h3>
+<ul>
+<li>**Resolution**:</li>
+<li>Implemented an in-memory, IP-based authentication rate limiter for the <code>/api/auth/register</code> and <code>/api/auth/login</code> endpoints.</li>
+<li>If a client IP submits more than 15 requests within 1 minute, the server rejects subsequent requests with a <code>429 Too Many Requests</code> error.</li>
+<li>**Result**: Protects the server from CPU exhaustion attacks targeting high-work factor <code>bcrypt</code> hash algorithms.</li>
+</ul>
+      </section>
+    </main>
+  </div>
+ </body>
+</html>
