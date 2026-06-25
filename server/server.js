@@ -17,7 +17,7 @@ const io = new Server(server, {
 });
 
 const JWT_SECRET = 'nexus-super-secret-key-12345';
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
