@@ -32,6 +32,7 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
 
   const slidesRef = useRef([]);
   slidesRef.current = slides;
+  const isProgrammatic = useRef(false);
 
   const userStr = localStorage.getItem('nexus_user');
   const currentUser = userStr ? JSON.parse(userStr) : { name: 'You' };
@@ -90,8 +91,10 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
       if (activeSlide && fabricCanvas.current) {
         const currentJSON = JSON.stringify(fabricCanvas.current.toJSON());
         if (activeSlide.fabricJSON && activeSlide.fabricJSON !== currentJSON) {
+          isProgrammatic.current = true;
           fabricCanvas.current.loadFromJSON(activeSlide.fabricJSON, () => {
             fabricCanvas.current.renderAll();
+            isProgrammatic.current = false;
           });
         }
       }
@@ -133,12 +136,15 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
     const currentSlide = slides[currentSlideIndex];
     if (currentSlide) {
       if (currentSlide.fabricJSON) {
+        isProgrammatic.current = true;
         canvas.loadFromJSON(currentSlide.fabricJSON, () => {
           canvas.backgroundColor = currentSlide.bgColor || '#ffffff';
           canvas.renderAll();
+          isProgrammatic.current = false;
         });
       } else {
         // Render fallback default elements
+        isProgrammatic.current = true;
         const titleText = new window.fabric.Textbox(currentSlide.title || 'Click to add title', {
           left: 100,
           top: 120,
@@ -165,7 +171,10 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
         canvas.backgroundColor = currentSlide.bgColor || '#ffffff';
         canvas.renderAll();
         // Save initial state
-        setTimeout(() => saveSlideState(canvas, true), 100);
+        setTimeout(() => {
+          saveSlideState(canvas, true);
+          isProgrammatic.current = false;
+        }, 100);
       }
     }
 
@@ -197,6 +206,7 @@ export default function SlidesEditor({ doc, onSave, simulatedEdits, otEngine, on
 
     // Content modification hooks
     const handleModify = () => {
+      if (isProgrammatic.current) return;
       saveSlideState(canvas);
     };
     canvas.on('object:modified', handleModify);
